@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     environment: str = "local"
     operator_id: str = "local-operator"
     user_email: str = "you@example.com"
-    sai_alias_email: str = "sai@example.com"
+    sai_alias_email: str = Field(
+        default="sai@example.com",
+        validation_alias=AliasChoices("SAI_ALIAS_EMAIL", "SAI_SAI_ALIAS_EMAIL"),
+    )
     log_level: str = "INFO"
     max_logged_snippet_chars: int = 160
     max_email_body_chars: int = 4000
@@ -38,8 +41,34 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SAI_OPENAI_BASE_URL", "OPENAI_BASE_URL"),
     )
     openai_timeout_seconds: int = 45
+    langsmith_tracing: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("SAI_LANGSMITH_ENABLED", "LANGSMITH_TRACING"),
+    )
+    langsmith_project: str = Field(
+        default="sai-baseversion",
+        validation_alias=AliasChoices(
+            "SAI_LANGSMITH_PROJECT",
+            "LANGSMITH_PROJECT",
+            "LANGCHAIN_PROJECT",
+        ),
+    )
+    langsmith_endpoint: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SAI_LANGSMITH_ENDPOINT", "LANGSMITH_ENDPOINT"),
+    )
+    langsmith_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SAI_LANGSMITH_API_KEY", "LANGSMITH_API_KEY"),
+    )
+    langsmith_workspace_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "SAI_LANGSMITH_WORKSPACE_ID",
+            "LANGSMITH_WORKSPACE_ID",
+        ),
+    )
 
-    graph_checkpoint_path: Path = Field(default=REPO_ROOT / "logs" / "langgraph_checkpoints.sqlite")
     root_dir: Path = Field(default=REPO_ROOT)
     prompts_dir: Path = Field(default=REPO_ROOT / "prompts")
     policies_dir: Path = Field(default=REPO_ROOT / "policies")
@@ -66,7 +95,12 @@ class Settings(BaseSettings):
 
     templates_dir: Path = Field(default=REPO_ROOT / "app" / "ui" / "templates")
 
-    model_config = SettingsConfigDict(env_prefix="SAI_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="SAI_",
+        env_file=".env",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     def ensure_runtime_paths(self) -> None:
         """Create the local directories the starter control plane expects."""
@@ -79,6 +113,11 @@ class Settings(BaseSettings):
         self.workflows_dir.mkdir(parents=True, exist_ok=True)
         self.registry_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
+
+    def langsmith_tracing_enabled(self) -> bool:
+        """Return whether LangSmith tracing is fully configured and enabled."""
+
+        return bool(self.langsmith_tracing and self.langsmith_api_key)
 
 
 @lru_cache(maxsize=1)

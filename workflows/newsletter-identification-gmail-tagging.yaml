@@ -21,7 +21,7 @@ tools:
   - tool_id: local_llm_classifier
     kind: local_llm_classifier
     prompt: email/llm-classify-local.md
-    provider: openai
+    provider: ollama
   - tool_id: cloud_llm_classifier
     kind: cloud_llm_classifier
     prompt: email/llm-classify-cloud.md

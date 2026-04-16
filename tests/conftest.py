@@ -22,4 +22,9 @@ def starter_settings(tmp_path: Path) -> Settings:
         sai_email_activity_log_path=learning_dir / "sai_email_activities.jsonl",
         sai_email_golden_dataset_path=learning_dir / "sai_email_golden_dataset.jsonl",
         openai_api_key="test-key",
+        langsmith_tracing=False,
+        langsmith_project="test-suite",
+        langsmith_api_key=None,
+        langsmith_endpoint=None,
+        langsmith_workspace_id=None,
     )

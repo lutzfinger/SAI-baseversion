@@ -16,6 +16,7 @@ from app.connectors.slack import SlackPostConnector
 from app.control_plane.loaders import PolicyStore, PromptStore, WorkflowStore
 from app.learning.fact_memory import FactMemoryStore, extract_operator_facts, render_fact_context
 from app.observability.audit import AuditLogger
+from app.observability.langsmith import flush_langsmith_tracers
 from app.observability.run_store import RunStore
 from app.observability.task_plane_models import TaskEventRecord, TaskRecord, TaskStepRecord, utc_now
 from app.shared.config import Settings
@@ -75,6 +76,7 @@ class ControlPlane:
         self.sai_email_worker = SaiEmailInteractionWorker(settings=settings)
 
     def close(self) -> None:
+        flush_langsmith_tracers()
         return None
 
     def list_workflows(self) -> list[dict[str, Any]]:
@@ -167,6 +169,7 @@ class ControlPlane:
             payload={"connector_overrides": connector_overrides or {}},
         )
         self.run_store.update_run_status(run_id, RunStatus.RUNNING)
+        result_model: NewsletterIdentifierResult | SaiEmailInteractionResult
         try:
             if workflow.worker == "newsletter_identifier":
                 result_model, artifact_path = self._run_newsletter_workflow(
@@ -405,13 +408,13 @@ class ControlPlane:
                 continue
 
             thread_messages = inbox_connector.fetch_thread_messages(thread_id=thread_id)
-            thread_state_summary = {
+            thread_state_summary: dict[str, object] = {
                 "message_count": len(thread_messages),
                 "last_subject": message.subject,
                 "last_sender": message.from_email,
                 "open_task_status": existing_task.status if existing_task is not None else None,
             }
-            task_context_summary = {
+            task_context_summary: dict[str, object] = {
                 "existing_task_id": existing_task.task_id if existing_task is not None else None,
                 "existing_status": existing_task.status if existing_task is not None else None,
                 "pending_question": (
@@ -690,15 +693,6 @@ class ControlPlane:
                         action_kind=action.action_kind,
                         status="completed",
                         result={"channel": action.channel},
-                    )
-                )
-            else:  # pragma: no cover
-                step_results.append(
-                    TaskExecutionStepResult(
-                        action_id=action.action_id,
-                        action_kind=action.action_kind,
-                        status="failed",
-                        error=f"Unsupported action kind: {action.action_kind}",
                     )
                 )
         return TaskExecutionOutcome(

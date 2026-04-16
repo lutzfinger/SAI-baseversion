@@ -34,11 +34,14 @@ def main() -> None:
         connector_overrides["max_results"] = args.max_results
 
     control_plane = ControlPlane(get_settings())
-    result = control_plane.run_workflow(
-        workflow_id=args.workflow_id,
-        connector_overrides=connector_overrides or None,
-    )
-    print(json.dumps(result.model_dump(mode="json"), indent=2))
+    try:
+        result = control_plane.run_workflow(
+            workflow_id=args.workflow_id,
+            connector_overrides=connector_overrides or None,
+        )
+        print(json.dumps(result.model_dump(mode="json"), indent=2))
+    finally:
+        control_plane.close()
 
 
 if __name__ == "__main__":

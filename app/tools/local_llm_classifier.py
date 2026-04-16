@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
@@ -11,88 +10,13 @@ from pydantic import BaseModel
 
 from app.shared.config import Settings
 from app.shared.models import PromptDocument, WorkflowToolDefinition
+from app.tools.langchain_client import (
+    LangChainStructuredClient,
+    StructuredLLMResponse,
+    llm_exception_details,
+)
 from app.tools.models import ToolExecutionRecord, ToolExecutionStatus
 from app.workers.email_models import EmailClassification
-
-
-@dataclass
-class StructuredLLMResponse:
-    payload: dict[str, Any]
-    raw_text: str
-    usage: dict[str, Any] | None = None
-    response_details: dict[str, Any] | None = None
-
-
-def llm_exception_details(exc: Exception) -> dict[str, Any]:
-    return {
-        "error_type": exc.__class__.__name__,
-        "error_message": str(exc),
-    }
-
-
-class OpenAIJSONClient:
-    """Small OpenAI-compatible JSON-schema client used by starter tools."""
-
-    def __init__(
-        self,
-        *,
-        api_key: str | None,
-        base_url: str | None,
-        timeout_seconds: int,
-    ) -> None:
-        try:
-            from openai import OpenAI
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("The openai package is not installed.") from exc
-
-        if not api_key:
-            raise RuntimeError("No API key is configured for the requested LLM client.")
-        self.base_url = (base_url or "https://api.openai.com/v1").rstrip("/")
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=self.base_url,
-            timeout=timeout_seconds,
-        )
-
-    def classify(
-        self,
-        *,
-        prompt: str,
-        model: str,
-        response_schema: dict[str, Any],
-        response_model: type[BaseModel] | None = None,
-        max_output_tokens: int | None = None,
-    ) -> StructuredLLMResponse:
-        request_payload: dict[str, Any] = {
-            "model": model,
-            "input": prompt,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "starter_email_classification",
-                    "schema": response_schema,
-                    "strict": True,
-                }
-            },
-        }
-        if max_output_tokens is not None:
-            request_payload["max_output_tokens"] = max_output_tokens
-        response = self.client.responses.create(**request_payload)
-        raw_text = str(getattr(response, "output_text", "")).strip()
-        payload = json.loads(raw_text)
-        if response_model is not None:
-            payload = response_model.model_validate(payload).model_dump(mode="json")
-        usage: dict[str, Any] | None = None
-        usage_object = getattr(response, "usage", None)
-        if usage_object is not None and hasattr(usage_object, "model_dump"):
-            dumped = usage_object.model_dump(mode="json")
-            usage = dumped if isinstance(dumped, dict) else None
-        return StructuredLLMResponse(
-            payload=payload,
-            raw_text=raw_text,
-            usage=usage,
-            response_details={"base_url": self.base_url, "model": model},
-        )
 
 
 class MockJSONClient:
@@ -210,23 +134,40 @@ class StructuredEmailClassifierTool:
                 },
             )
 
-    def _build_client(self) -> OpenAIJSONClient | MockJSONClient | None:
+    def _build_client(self) -> LangChainStructuredClient | MockJSONClient | None:
         if self.provider == "mock":
             return MockJSONClient()
         if self.tool_definition.kind == "local_llm_classifier":
-            base_url = _local_openai_base_url(self.settings.local_llm_host)
-            return OpenAIJSONClient(
-                api_key="local",
-                base_url=base_url,
+            return LangChainStructuredClient(
+                provider="ollama",
+                model=self.model,
+                settings=self.settings,
                 timeout_seconds=self.timeout_seconds,
+                max_output_tokens=self.max_output_tokens,
+                run_name=self.tool_definition.tool_id,
+                run_tags=[self.tool_definition.kind, "provider:ollama"],
+                run_metadata={
+                    "tool_id": self.tool_definition.tool_id,
+                    "tool_kind": self.tool_definition.kind,
+                    "environment": self.settings.environment,
+                },
             )
         if self.provider == "openai":
             if not self.settings.openai_api_key:
                 return None
-            return OpenAIJSONClient(
-                api_key=self.settings.openai_api_key,
-                base_url=self.settings.openai_base_url,
+            return LangChainStructuredClient(
+                provider="openai",
+                model=self.model,
+                settings=self.settings,
                 timeout_seconds=self.timeout_seconds,
+                max_output_tokens=self.max_output_tokens,
+                run_name=self.tool_definition.tool_id,
+                run_tags=[self.tool_definition.kind, "provider:openai"],
+                run_metadata={
+                    "tool_id": self.tool_definition.tool_id,
+                    "tool_kind": self.tool_definition.kind,
+                    "environment": self.settings.environment,
+                },
             )
         return None
 
@@ -265,6 +206,8 @@ def _resolve_timeout_seconds(tool_definition: WorkflowToolDefinition, settings: 
         if tool_definition.kind == "local_llm_classifier":
             return settings.local_llm_timeout_seconds
         return settings.openai_timeout_seconds
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (str, int, float)):
+        return settings.openai_timeout_seconds
     try:
         return max(5, int(raw_value))
     except (TypeError, ValueError):
@@ -275,17 +218,12 @@ def _resolve_max_output_tokens(tool_definition: WorkflowToolDefinition) -> int:
     raw_value = tool_definition.config.get("max_output_tokens")
     if raw_value in {None, ""}:
         return 300
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (str, int, float)):
+        return 300
     try:
         return max(100, int(raw_value))
     except (TypeError, ValueError):
         return 300
-
-
-def _local_openai_base_url(host: str) -> str:
-    normalized = host.rstrip("/")
-    if normalized.endswith("/v1"):
-        return normalized
-    return f"{normalized}/v1"
 
 
 def _extract_message_id(prompt: str) -> str:

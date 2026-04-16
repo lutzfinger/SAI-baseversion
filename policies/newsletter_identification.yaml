@@ -13,6 +13,7 @@ rules:
     mode: allow
 gmail:
   allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
     client_id: SAI_GMAIL_CLIENT_ID
     client_secret: SAI_GMAIL_CLIENT_SECRET
     refresh_token: SAI_GMAIL_REFRESH_TOKEN

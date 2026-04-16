@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
+from typing import Any
 
 from app.shared.config import Settings
 from app.shared.models import PromptDocument, WorkflowToolDefinition
-from app.tools.local_llm_classifier import (
-    OpenAIJSONClient,
+from app.tools.langchain_client import (
+    LangChainStructuredClient,
     StructuredLLMResponse,
     llm_exception_details,
 )
@@ -97,18 +98,28 @@ class SaiEmailGenericPlannerTool:
                 "response_mode": plan.response_mode,
                 "request_kind": plan.request_kind,
                 "activity_count": len(plan.activities),
+                **(response.response_details or {}),
             },
         )
 
-    def _client(self) -> OpenAIJSONClient:
+    def _client(self) -> LangChainStructuredClient | _MockPlannerClient:
         if self.provider == "mock":
             return _MockPlannerClient()
         if not self.settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is required for starter email planning.")
-        return OpenAIJSONClient(
-            api_key=self.settings.openai_api_key,
-            base_url=self.settings.openai_base_url,
+        return LangChainStructuredClient(
+            provider="openai",
+            model=self.model,
+            settings=self.settings,
             timeout_seconds=self.timeout_seconds,
+            max_output_tokens=self.max_output_tokens,
+            run_name=self.tool_definition.tool_id,
+            run_tags=[self.tool_definition.kind, "provider:openai"],
+            run_metadata={
+                "tool_id": self.tool_definition.tool_id,
+                "tool_kind": self.tool_definition.kind,
+                "environment": self.settings.environment,
+            },
         )
 
     def _render_prompt(
@@ -157,6 +168,8 @@ def _resolve_timeout_seconds(tool_definition: WorkflowToolDefinition, settings: 
     raw_value = tool_definition.config.get("timeout_seconds")
     if raw_value in {None, ""}:
         return settings.openai_timeout_seconds
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (str, int, float)):
+        return settings.openai_timeout_seconds
     try:
         return max(5, int(raw_value))
     except (TypeError, ValueError):
@@ -167,23 +180,22 @@ def _resolve_max_output_tokens(tool_definition: WorkflowToolDefinition) -> int:
     raw_value = tool_definition.config.get("max_output_tokens")
     if raw_value in {None, ""}:
         return 700
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (str, int, float)):
+        return 700
     try:
         return max(200, int(raw_value))
     except (TypeError, ValueError):
         return 700
 
 
-class _MockPlannerClient(OpenAIJSONClient):
-    def __init__(self) -> None:
-        pass
-
+class _MockPlannerClient:
     def classify(
         self,
         *,
         prompt: str,
         model: str,
         response_schema: dict[str, object],
-        response_model: type[object] | None = None,
+        response_model: type[Any] | None = None,
         max_output_tokens: int | None = None,
     ) -> StructuredLLMResponse:
         del model, response_schema, response_model, max_output_tokens

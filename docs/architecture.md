@@ -24,13 +24,19 @@ feature set to a small starter surface.
    `app/workers/sai_email_interaction.py` compose tools without owning policy
    decisions.
 
-5. Learning and memory
+5. LLM runtime
+   LangChain backs the structured LLM calls used by the starter tools.
+   `ChatOllama` powers the local classifier path and `ChatOpenAI` powers the
+   cloud classifier and email planner. LangSmith tracing is optional and must
+   be explicitly enabled in configuration.
+
+6. Learning and memory
    `app/learning/email_eval_dataset.py`,
    `app/learning/sai_email_dataset.py`, and
    `app/learning/fact_memory.py` hold append-only learning data and reusable
    facts.
 
-6. Observability
+7. Observability
    `app/observability/audit.py`, `app/observability/run_store.py`, and
    `app/observability/task_plane_models.py` provide auditability and durable
    operational state.

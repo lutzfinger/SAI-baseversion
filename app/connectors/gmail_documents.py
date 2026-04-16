@@ -164,7 +164,7 @@ def _best_effort_attachment_text(content: object, *, mime_type: str) -> str:
 
 def _extract_pdf_text(content: bytes) -> str:
     try:
-        from pypdf import PdfReader  # type: ignore[import-untyped]
+        from pypdf import PdfReader
     except ImportError:
         return ""
     try:
