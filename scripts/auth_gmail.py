@@ -19,8 +19,11 @@ def main() -> None:
     args = parser.parse_args()
 
     control_plane = ControlPlane(get_settings())
-    result = control_plane.authenticate_gmail(workflow_id=args.workflow_id)
-    print(json.dumps(result, indent=2))
+    try:
+        result = control_plane.authenticate_gmail(workflow_id=args.workflow_id)
+        print(json.dumps(result, indent=2))
+    finally:
+        control_plane.close()
 
 
 if __name__ == "__main__":

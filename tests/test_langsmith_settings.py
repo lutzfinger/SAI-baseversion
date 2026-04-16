@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from pytest import MonkeyPatch
+
+from app.shared.config import Settings
+
+
+def test_settings_accept_standard_langsmith_env_names(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_PROJECT", "starter-traces")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    monkeypatch.setenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+    monkeypatch.setenv("LANGSMITH_WORKSPACE_ID", "workspace-123")
+
+    settings = Settings()
+
+    assert settings.langsmith_tracing is True
+    assert settings.langsmith_project == "starter-traces"
+    assert settings.langsmith_api_key == "test-key"
+    assert settings.langsmith_endpoint == "https://api.smith.langchain.com"
+    assert settings.langsmith_workspace_id == "workspace-123"
+    assert settings.langsmith_tracing_enabled() is True
+
+
+def test_settings_accept_direct_field_names() -> None:
+    settings = Settings(
+        openai_api_key="openai-test-key",
+        langsmith_tracing=True,
+        langsmith_project="starter-direct",
+        langsmith_api_key="langsmith-test-key",
+        langsmith_endpoint="https://api.smith.langchain.com",
+        langsmith_workspace_id="workspace-456",
+    )
+
+    assert settings.openai_api_key == "openai-test-key"
+    assert settings.langsmith_project == "starter-direct"
+    assert settings.langsmith_api_key == "langsmith-test-key"
+    assert settings.langsmith_endpoint == "https://api.smith.langchain.com"
+    assert settings.langsmith_workspace_id == "workspace-456"
+    assert settings.langsmith_tracing_enabled() is True

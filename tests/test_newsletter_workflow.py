@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import json
 
+from pytest import MonkeyPatch
+
 from app.connectors.gmail import GmailAPIConnector
 from app.connectors.gmail_labels import GmailLabelConnector
 from app.control_plane.runner import ControlPlane
+from app.shared.config import Settings
 from app.tools.local_llm_classifier import MockJSONClient, StructuredEmailClassifierTool
 from app.workers.email_models import EmailMessage, EmailThreadTagResult
 
 
 def test_newsletter_tagging_workflow_writes_eval_and_artifact(
-    monkeypatch,
-    starter_settings,
+    monkeypatch: MonkeyPatch,
+    starter_settings: Settings,
 ) -> None:
     message = EmailMessage(
         message_id="msg-1",

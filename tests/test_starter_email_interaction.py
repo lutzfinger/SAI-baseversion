@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any
+
+from pytest import MonkeyPatch
 
 from app.connectors.gmail import GmailAPIConnector
 from app.connectors.gmail_documents import GmailDocumentConnector
 from app.connectors.gmail_send import GmailSendConnector
 from app.control_plane.runner import ControlPlane
+from app.shared.config import Settings
 from app.tools.models import ToolExecutionRecord, ToolExecutionStatus
 from app.workers.email_models import EmailDocument, EmailMessage
 from app.workers.sai_email_interaction_models import (
@@ -17,8 +21,8 @@ from app.workers.task_assistant_models import TaskAction, TaskExecutionOutcome, 
 
 
 def test_starter_email_interaction_creates_task_and_reply(
-    monkeypatch,
-    starter_settings,
+    monkeypatch: MonkeyPatch,
+    starter_settings: Settings,
 ) -> None:
     request_message = EmailMessage(
         message_id="email-1",
@@ -52,7 +56,7 @@ def test_starter_email_interaction_creates_task_and_reply(
     sent_messages: list[dict[str, str]] = []
 
     def fake_send(
-        self,
+        self: object,
         *,
         to_email: str,
         subject: str,
@@ -82,7 +86,10 @@ def test_starter_email_interaction_creates_task_and_reply(
 
     monkeypatch.setattr(GmailSendConnector, "send_plaintext_message", fake_send)
 
-    def fake_plan(*args, **kwargs):
+    def fake_plan(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[SaiEmailGenericPlan, ToolExecutionRecord]:
         del args, kwargs
         return (
             SaiEmailGenericPlan(
@@ -158,8 +165,8 @@ def test_starter_email_interaction_creates_task_and_reply(
 
 
 def test_starter_email_interaction_approval_executes_and_writes_golden(
-    monkeypatch,
-    starter_settings,
+    monkeypatch: MonkeyPatch,
+    starter_settings: Settings,
 ) -> None:
     request_message = EmailMessage(
         message_id="email-1",
@@ -186,7 +193,7 @@ def test_starter_email_interaction_approval_executes_and_writes_golden(
     sent_messages: list[dict[str, str]] = []
 
     def fake_send(
-        self,
+        self: object,
         *,
         to_email: str,
         subject: str,
@@ -208,10 +215,12 @@ def test_starter_email_interaction_approval_executes_and_writes_golden(
     control_plane = ControlPlane(starter_settings)
     stage = {"value": "request"}
 
-    def fake_fetch_messages(self):
+    def fake_fetch_messages(self: object) -> list[EmailMessage]:
+        del self
         return [request_message] if stage["value"] == "request" else []
 
-    def fake_fetch_thread_messages(self, thread_id: str):
+    def fake_fetch_thread_messages(self: object, thread_id: str) -> list[EmailMessage]:
+        del self
         del thread_id
         return (
             [request_message]
@@ -219,7 +228,8 @@ def test_starter_email_interaction_approval_executes_and_writes_golden(
             else [request_message, approval_message]
         )
 
-    def fake_fetch_document(self, *, message_id: str):
+    def fake_fetch_document(self: object, *, message_id: str) -> EmailDocument:
+        del self
         if message_id == "email-1":
             return EmailDocument(
                 message=request_message,
@@ -236,7 +246,10 @@ def test_starter_email_interaction_approval_executes_and_writes_golden(
     monkeypatch.setattr(GmailDocumentConnector, "fetch_document", fake_fetch_document)
     monkeypatch.setattr(GmailSendConnector, "send_plaintext_message", fake_send)
 
-    def fake_plan(*args, **kwargs):
+    def fake_plan(
+        *args: object,
+        **kwargs: object,
+    ) -> tuple[SaiEmailGenericPlan, ToolExecutionRecord]:
         del args, kwargs
         return (
             SaiEmailGenericPlan(
@@ -283,17 +296,20 @@ def test_starter_email_interaction_approval_executes_and_writes_golden(
         "plan_generic_request",
         fake_plan,
     )
-    monkeypatch.setattr(
-        control_plane,
-        "_execute_task_plan",
-        lambda **kwargs: TaskExecutionOutcome(
+    def fake_execute_task_plan(**kwargs: Any) -> TaskExecutionOutcome:
+        return TaskExecutionOutcome(
             approved=True,
-            approved_by=kwargs["approved_by"],
+            approved_by=str(kwargs["approved_by"]),
             approved_at=datetime.now(UTC),
             step_results=[],
             completed_action_count=1,
             failed_action_count=0,
-        ),
+        )
+
+    monkeypatch.setattr(
+        control_plane,
+        "_execute_task_plan",
+        fake_execute_task_plan,
     )
 
     first_result = control_plane.run_workflow(workflow_id="starter-email-interaction")

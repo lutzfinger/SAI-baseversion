@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 
 from app.control_plane.loaders import PromptLockStore, PromptStore, WorkflowStore
+from app.shared.config import Settings
 from app.shared.registry import list_effect_classes, list_task_kinds
 from app.tools.task_assistant import build_safe_workflow_catalog
 
 
-def test_prompt_locks_match_current_files(starter_settings) -> None:
+def test_prompt_locks_match_current_files(starter_settings: Settings) -> None:
     prompt_store = PromptStore(starter_settings.prompts_dir)
     prompt_locks = PromptLockStore(starter_settings.prompts_dir).load()
 
@@ -18,7 +19,7 @@ def test_prompt_locks_match_current_files(starter_settings) -> None:
         assert actual_sha == expected_sha
 
 
-def test_workflow_catalog_and_registry_are_starter_scoped(starter_settings) -> None:
+def test_workflow_catalog_and_registry_are_starter_scoped(starter_settings: Settings) -> None:
     workflow_store = WorkflowStore(starter_settings.workflows_dir)
     workflows = workflow_store.list_workflows()
 
