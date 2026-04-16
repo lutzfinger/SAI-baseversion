@@ -1,0 +1,22 @@
+workflow_id: starter-email-interaction
+version: "1"
+description: Read operator emails to SAI, suggest a starter workflow, and reply safely by email.
+worker: starter_email_interaction
+connector: gmail
+connector_config:
+  query:
+  label_ids: []
+  max_results: 20
+policy: starter_email_interaction.yaml
+tags:
+  - starter
+  - email
+  - task_assistant
+tools:
+  - tool_id: sai_email_planner
+    kind: sai_email_planner
+    prompt: sai_email/plan.md
+    provider: openai
+    model: gpt-5.2
+    config:
+      max_output_tokens: 700

@@ -1,0 +1,30 @@
+workflow_id: newsletter-identification-gmail
+version: "1"
+description: Identify newsletters in Gmail without modifying the mailbox.
+worker: newsletter_identifier
+connector: gmail
+connector_config:
+  query: in:inbox
+  label_ids:
+    - INBOX
+  max_results: 100
+policy: newsletter_identification.yaml
+tags:
+  - starter
+  - email
+  - newsletter
+tools:
+  - tool_id: keyword_classifier
+    kind: keyword_classifier
+    prompt: email/keyword-classify.md
+  - tool_id: local_llm_classifier
+    kind: local_llm_classifier
+    prompt: email/llm-classify-local.md
+    provider: openai
+  - tool_id: cloud_llm_classifier
+    kind: cloud_llm_classifier
+    prompt: email/llm-classify-cloud.md
+    provider: openai
+    model: gpt-5.2
+  - tool_id: consistency_evaluator
+    kind: consistency_evaluator

@@ -1,0 +1,13 @@
+task_kinds:
+  - kind: newsletter_identification
+    description: Classify inbox messages into newsletter or non-newsletter categories.
+    typical_sources: [gmail_inbox]
+    closure_states: [completed, failed]
+  - kind: workflow_suggestion
+    description: Suggest a safe starter workflow or ask for the missing information needed to proceed.
+    typical_sources: [gmail_to_sai]
+    closure_states: [awaiting_information, awaiting_approval, completed, failed]
+  - kind: workflow_execution
+    description: Execute an already approved starter workflow plan.
+    typical_sources: [approved_email_reply]
+    closure_states: [completed, failed]

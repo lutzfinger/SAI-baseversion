@@ -1,0 +1,24 @@
+policy_id: newsletter_identification
+version: "1"
+description: Read-only Gmail access for starter newsletter identification.
+default_mode: deny
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+  - action: connector.gmail.read_metadata
+    mode: allow
+  - action: connector.gmail.read_snippet
+    mode: allow
+  - action: connector.gmail.read_body
+    mode: allow
+gmail:
+  allowed_env_keys:
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_TOKEN_PATH
+  default_token_filename: starter_gmail_readonly_token.json
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+  allowed_mailbox_domains: []
+  allowed_mailbox_accounts: []

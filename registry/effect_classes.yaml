@@ -1,0 +1,17 @@
+effect_classes:
+  - name: read_only
+    description: Reads data or plans without mutating any external system.
+    has_external_side_effects: false
+    human_review_recommended: false
+  - name: mailbox_label_mutation
+    description: Applies or removes Gmail labels and may archive from Inbox.
+    has_external_side_effects: true
+    human_review_recommended: true
+  - name: email_reply
+    description: Sends a bounded outbound email response.
+    has_external_side_effects: true
+    human_review_recommended: true
+  - name: slack_post
+    description: Posts a bounded operational Slack message.
+    has_external_side_effects: true
+    human_review_recommended: true
