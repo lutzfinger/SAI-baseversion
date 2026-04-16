@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sai-control-plane"
+version = "0.1.0"
+description = "Starter SAI control plane with Gmail, Slack, newsletter identification, and email-native workflow suggestions."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "google-api-python-client>=2.170,<3.0",
+  "google-auth-httplib2>=0.2,<1.0",
+  "google-auth-oauthlib>=1.2,<2.0",
+  "openai>=2.30,<3.0",
+  "pypdf>=5.4,<6.0",
+  "pydantic>=2.10,<3.0",
+  "pydantic-settings>=2.7,<3.0",
+  "pyyaml>=6.0,<7.0",
+  "slack-sdk>=3.36,<4.0",
+  "uvicorn>=0.34,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1.0",
+  "mypy>=1.15,<2.0",
+  "pytest>=8.3,<9.0",
+  "pytest-xdist>=3.6,<4.0",
+  "ruff>=0.11,<1.0",
+]
+
+[project.scripts]
+sai-api = "app.main:main"
+
+[tool.setuptools]
+packages = [
+  "app",
+  "app.approvals",
+  "app.connectors",
+  "app.control_plane",
+  "app.learning",
+  "app.observability",
+  "app.shared",
+  "app.tools",
+  "app.ui",
+  "app.workers",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["app"]
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true

@@ -1,0 +1,38 @@
+policy_id: starter_email_interaction
+version: "1"
+description: Email-native starter planning lane with bounded Gmail reply capability.
+default_mode: deny
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+  - action: connector.gmail.read_metadata
+    mode: allow
+  - action: connector.gmail.read_snippet
+    mode: allow
+  - action: connector.gmail.read_body
+    mode: allow
+  - action: connector.gmail.send_message
+    mode: allow
+  - action: connector.slack.authenticate
+    mode: allow
+  - action: connector.slack.post_message
+    mode: allow
+gmail:
+  allowed_env_keys:
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_TOKEN_PATH
+  default_token_filename: starter_gmail_interaction_token.json
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.send
+  allowed_mailbox_domains: []
+  allowed_mailbox_accounts: []
+  allowed_request_sender_emails:
+    - you@example.com
+  allowed_reply_recipient_emails:
+    - you@example.com
+slack:
+  allowed_channel_names:
+    - starter-status

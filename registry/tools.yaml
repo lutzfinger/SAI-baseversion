@@ -1,0 +1,197 @@
+shared_schemas:
+  EmailMessage:
+    type: object
+    required: [message_id, from_email, to, subject, snippet]
+    properties:
+      message_id: {type: string}
+      thread_id: {type: [string, "null"]}
+      from_email: {type: string}
+      from_name: {type: [string, "null"]}
+      to:
+        type: array
+        items: {type: string}
+      cc:
+        type: array
+        items: {type: string}
+      delivered_to:
+        type: array
+        items: {type: string}
+      subject: {type: string}
+      snippet: {type: string}
+      body_excerpt: {type: string}
+    additionalProperties: false
+  EmailClassification:
+    type: object
+    required: [message_id, level1_classification, level2_intent, confidence, reason]
+    properties:
+      message_id: {type: string}
+      level1_classification: {type: string}
+      level2_intent: {type: string}
+      confidence: {type: number}
+      reason: {type: string}
+    additionalProperties: false
+
+tools:
+  - kind: keyword_classifier
+    surface: workflow_callable
+    category: email
+    purpose: Apply clear newsletter filter rules from sender metadata and list headers.
+    input_schema: {$ref: "#/shared_schemas/EmailMessage"}
+    output_schema: {$ref: "#/shared_schemas/EmailClassification"}
+    effect_class: read_only
+    required_actions: []
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: []
+    prompt_requirement: required
+    default_prompt: email/keyword-classify.md
+    failure_modes: [misconfigured_rule_set]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: always_denied
+    supports_preview: true
+    retryable: false
+    idempotent: true
+    data_sensitivity: low
+
+  - kind: local_llm_classifier
+    surface: workflow_callable
+    category: email
+    purpose: Run a structured starter email classification on the local model path.
+    input_schema: {$ref: "#/shared_schemas/EmailMessage"}
+    output_schema: {$ref: "#/shared_schemas/EmailClassification"}
+    effect_class: read_only
+    required_actions: []
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: []
+    prompt_requirement: required
+    default_prompt: email/llm-classify-local.md
+    failure_modes: [local_model_unavailable, parse_error]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: always_denied
+    supports_preview: true
+    retryable: true
+    idempotent: true
+    data_sensitivity: moderate
+
+  - kind: cloud_llm_classifier
+    surface: workflow_callable
+    category: email
+    purpose: Run a structured starter email classification on the cloud model path.
+    input_schema: {$ref: "#/shared_schemas/EmailMessage"}
+    output_schema: {$ref: "#/shared_schemas/EmailClassification"}
+    effect_class: read_only
+    required_actions: []
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: []
+    prompt_requirement: required
+    default_prompt: email/llm-classify-cloud.md
+    failure_modes: [cloud_model_unavailable, parse_error]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: always_denied
+    supports_preview: true
+    retryable: true
+    idempotent: true
+    data_sensitivity: moderate
+
+  - kind: consistency_evaluator
+    surface: workflow_callable
+    category: email
+    purpose: Choose the safest final starter classification from keyword, local, and cloud candidates.
+    input_schema:
+      type: object
+      properties:
+        message: {$ref: "#/shared_schemas/EmailMessage"}
+        keyword_candidate: {$ref: "#/shared_schemas/EmailClassification"}
+        local_candidate:
+          anyOf:
+            - {$ref: "#/shared_schemas/EmailClassification"}
+            - {type: "null"}
+        cloud_candidate:
+          anyOf:
+            - {$ref: "#/shared_schemas/EmailClassification"}
+            - {type: "null"}
+      additionalProperties: false
+    output_schema: {$ref: "#/shared_schemas/EmailClassification"}
+    effect_class: read_only
+    required_actions: []
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: []
+    prompt_requirement: forbidden
+    default_prompt:
+    failure_modes: [inconsistent_inputs]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: always_denied
+    supports_preview: true
+    retryable: false
+    idempotent: true
+    data_sensitivity: low
+
+  - kind: gmail_thread_tagger
+    surface: workflow_callable
+    category: email
+    purpose: Apply starter Gmail labels and optionally archive the thread from Inbox.
+    input_schema:
+      type: object
+      properties:
+        thread_id: {type: string}
+        classification: {$ref: "#/shared_schemas/EmailClassification"}
+      required: [thread_id, classification]
+      additionalProperties: false
+    output_schema:
+      type: object
+      properties:
+        thread_id: {type: string}
+        applied_label_names:
+          type: array
+          items: {type: string}
+      additionalProperties: false
+    effect_class: mailbox_label_mutation
+    required_actions: [connector.gmail.modify_labels]
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: [gmail_thread]
+    prompt_requirement: forbidden
+    default_prompt:
+    failure_modes: [label_creation_failed, gmail_modify_failed]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: approval_supported
+    supports_preview: false
+    retryable: true
+    idempotent: true
+    data_sensitivity: low
+
+  - kind: sai_email_planner
+    surface: workflow_callable
+    category: task_assistant
+    purpose: Propose a safe starter workflow response over email.
+    input_schema:
+      type: object
+      properties:
+        request_text: {type: string}
+        workflow_catalog:
+          type: array
+          items: {type: object}
+      additionalProperties: true
+    output_schema:
+      type: object
+      properties:
+        response_mode: {type: string}
+        short_response: {type: string}
+      additionalProperties: true
+    effect_class: read_only
+    required_actions: []
+    default_policy_mode: allow
+    allowed_connectors: [gmail]
+    allowed_targets: []
+    prompt_requirement: required
+    default_prompt: sai_email/plan.md
+    failure_modes: [planner_parse_error, unsupported_request]
+    redaction_rules: [truncate_email_body]
+    approval_behavior: always_denied
+    supports_preview: true
+    retryable: true
+    idempotent: true
+    data_sensitivity: moderate
