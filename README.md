@@ -213,3 +213,10 @@ Configure it with the optional `SAI_LANGSMITH_*` settings in `.env.example`.
 
 - `docs/architecture.md`
 - `docs/system_inventory.md`
+- `CONTRIBUTING.md`
+
+## Contributing
+
+Small fixes are welcome. For anything beyond a tiny docs or typo change, please
+open an Issue first so the contribution can be aligned on scope and direction
+before implementation.
