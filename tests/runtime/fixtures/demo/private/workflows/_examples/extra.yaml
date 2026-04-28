@@ -1,0 +1,4 @@
+name: private-only
+version: 1
+description: Lives only in private. Added to merged tree, not shadowed.
+source: private

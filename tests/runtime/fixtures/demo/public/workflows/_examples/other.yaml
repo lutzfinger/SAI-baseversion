@@ -1,0 +1,4 @@
+name: other-example
+version: 1
+description: Public-only example. Not overridden by private.
+source: public

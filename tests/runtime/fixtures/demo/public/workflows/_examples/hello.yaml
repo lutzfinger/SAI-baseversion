@@ -1,0 +1,4 @@
+name: hello-world
+version: 1
+description: Public framework example. Private overlay overrides this file.
+source: public
