@@ -1,0 +1,4 @@
+name: hello-world
+version: 2
+description: Private overlay replaces the public hello.yaml entirely.
+source: private

@@ -37,6 +37,7 @@ dev = [
 
 [project.scripts]
 sai-api = "app.main:main"
+sai-overlay = "app.runtime.overlay:cli"
 
 [tool.setuptools]
 packages = [
@@ -47,6 +48,7 @@ packages = [
   "app.learning",
   "app.observability",
   "app.reflection",
+  "app.runtime",
   "app.shared",
   "app.tools",
   "app.ui",
