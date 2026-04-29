@@ -1,0 +1,21 @@
+# Pre-commit hook for SAI-public.
+#
+# Install once on a fresh checkout:
+#
+#   pip install pre-commit
+#   pre-commit install
+#
+# After that, every `git commit` runs the boundary linter on the staged files.
+# Run manually with `pre-commit run --all-files`.
+
+repos:
+  - repo: local
+    hooks:
+      - id: boundary-check
+        name: boundary check (no personal data in public repo)
+        entry: python scripts/boundary_check.py --paths
+        language: system
+        pass_filenames: true
+        # Skip non-text files; the linter also skips them but pre-commit will
+        # not bother to invoke on these.
+        exclude: '\.(png|jpg|jpeg|gif|pdf|zip|tar|gz|sqlite|db|pyc|woff2?|ttf|ico)$'
