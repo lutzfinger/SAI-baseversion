@@ -1,0 +1,103 @@
+policy_id: sai_email_interaction
+version: "3"
+description: >
+  Email-native operator interaction workflow for messages sent to agent@example.com.
+  SAI may read the request thread, read bounded safe attachment text, search Gmail,
+  reason, plan, and reply by email. External write actions remain approval-gated in
+  their own governed workflows.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - explanation
+    - html_text
+    - reasoning
+    - request_text
+    - short_response
+    - snippet
+    - subject
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_SAI_EMAIL_TOKEN_PATH
+    extra_token_paths: SAI_MEETING_EXTRA_GMAIL_TOKEN_PATHS
+  default_token_filename: sai_email_interaction_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_request_sender_emails:
+    - you@example.com
+  allowed_reply_recipient_emails:
+    - you@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.send
+calendar:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_MEETING_CALENDAR_TOKEN_PATH
+  default_token_filename: meeting_calendar_token.json
+  allowed_scopes:
+    - https://www.googleapis.com/auth/calendar.readonly
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: SAI email interaction needs one explicit Gmail OAuth session for read and reply.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: SAI email interaction needs headers and thread metadata.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: SAI email interaction needs bounded snippets for routing and failure replies.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: SAI email interaction needs bounded body and PDF attachment text.
+  - action: connector.gmail.read_history
+    mode: allow
+    reason: SAI email interaction may inspect prior thread and contact history before replying.
+  - action: connector.gmail.send_message
+    mode: allow
+    reason: SAI email interaction replies in-thread by email.
+  - action: connector.calendar.authenticate
+    mode: allow
+    reason: SAI email interaction may use read-only calendar history to avoid stale plans.
+  - action: connector.calendar.read_events
+    mode: allow
+    reason: SAI email interaction may inspect relevant calendar history before replying.
+  - action: connector.calendar.modify_*
+    mode: deny
+    reason: SAI email interaction must never mutate calendar state without a separate approved workflow.
+  - action: tool.sai_email.plan
+    mode: allow
+    reason: SAI may plan one email-native operator response in the cloud model.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

@@ -1,0 +1,74 @@
+policy_id: meeting_supervision_review
+version: "1"
+description: Daily read-only reconciliation between supervision ledger state and the SAI/Supervising Gmail label.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - error
+    - reasoning
+    - snippet
+    - subject
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_MEETING_GMAIL_TOKEN_PATH
+    extra_token_paths: SAI_MEETING_EXTRA_GMAIL_TOKEN_PATHS
+  default_token_filename: meeting_gmail_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+  allowed_channel_names:
+    - #general
+rules:
+  - action: observability.run_store.read
+    mode: allow
+    reason: The review compares stored supervision state against Gmail labels.
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Gmail OAuth is required to inspect the SAI/Supervising label.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: The review reads metadata for threads carrying SAI/Supervising.
+  - action: connector.gmail.modify_*
+    mode: deny
+    reason: The review must never mutate mailbox state.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: Slack auth is required to report supervision mismatches.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Resolving #general may require Slack channel metadata lookup.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: The review posts to #general only when a mismatch is found.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

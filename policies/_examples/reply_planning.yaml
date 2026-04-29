@@ -1,0 +1,76 @@
+policy_id: reply_planning
+version: "1"
+description: Read-and-draft workflow for planning email replies without sending them.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 1500
+  output_guard:
+    max_reason_chars: 240
+    enforce_message_id_match: true
+  evaluator:
+    key: classification_consistency
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_MEETING_GMAIL_TOKEN_PATH
+  default_token_filename: meeting_gmail_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.compose
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Local Gmail OAuth is explicit and operator initiated.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Reply planning needs inbox metadata.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Reply planning needs snippet previews.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Reply planning needs bounded body excerpts.
+  - action: connector.gmail.create_draft
+    mode: allow
+    reason: Reply planning writes approval drafts only and never sends automatically.
+  - action: connector.gmail.send_*
+    mode: deny
+    reason: Reply planning may draft messages but must never send them.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

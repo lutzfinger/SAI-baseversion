@@ -1,0 +1,12 @@
+workflow_id: example_repeated-error-review-daily
+version: "1"
+description: Review recurring #general issues and DM the operator once the same issue repeats across three straight local days.
+worker: repeated_error_review
+connector: runtime_only
+connector_config: {}
+policy: repeated_error_review.yaml
+tags:
+  - slack
+  - errors
+  - operator
+tools: []

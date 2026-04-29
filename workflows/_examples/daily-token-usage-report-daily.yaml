@@ -1,0 +1,24 @@
+workflow_id: example_daily-token-usage-report-daily
+version: "1"
+description: Fetch yesterday's audit and LangSmith token usage totals and post one Slack summary.
+worker: daily_token_usage_report
+connector: runtime_only
+connector_config: {}
+policy: daily_token_usage_report.yaml
+tags:
+  - costs
+  - slack
+  - observability
+  - openai
+  - langsmith
+tools:
+  - tool_id: audit_daily_token_usage_reader
+    kind: audit_token_usage_reader
+  - tool_id: langsmith_daily_token_usage_reader
+    kind: langsmith_token_usage_reader
+    config:
+      max_root_runs: 100
+  - tool_id: daily_token_usage_report_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general

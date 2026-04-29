@@ -1,0 +1,57 @@
+policy_id: email_label_cleanup
+version: "1"
+description: Clear Gmail taxonomy labels from threads that have only L1 or only L2 left.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_TAGGING_TOKEN_PATH
+  default_token_filename: gmail_tagging_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.modify
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Explicit local OAuth is required before Gmail label cleanup can run.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Label cleanup needs Gmail metadata to detect partial taxonomy labels.
+  - action: connector.gmail.modify_labels
+    mode: allow
+    reason: The cleanup workflow removes leftover taxonomy labels when only L1 or only L2 remains.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

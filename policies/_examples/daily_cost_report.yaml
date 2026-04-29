@@ -1,0 +1,44 @@
+policy_id: daily_cost_report
+version: "1"
+description: Daily provider cost reporting to Slack with read-only provider access.
+default_mode: deny
+redaction:
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  truncated_keys:
+    - error
+    - note
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+  allowed_channel_names:
+    - #general
+    - #general
+rules:
+  - action: provider.openai.read_costs
+    mode: allow
+    reason: The workflow reads one day of organization cost data from OpenAI.
+  - action: provider.google_cloud.query_billing_export
+    mode: allow
+    reason: The workflow reads one day of Gemini cost data from Cloud Billing export.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: The workflow posts one daily cost message to Slack.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Resolving the configured Slack channel name may require metadata lookup.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: The workflow posts one daily cost summary to Slack.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

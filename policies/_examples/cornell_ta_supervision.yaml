@@ -1,0 +1,91 @@
+policy_id: cornell_ta_supervision
+version: "1"
+description: Supervise Cornell TA course threads inside SAI/Input, send narrow TA check-ins, and escalate missing follow-through to Lutz by Slack DM.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 1500
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+  allowed_user_ids_env: SAI_SLACK_ALLOWED_USER_IDS
+  allowed_user_ids:
+    - U0AQP7SBWGG
+  allow_direct_messages: true
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_MEETING_GMAIL_TOKEN_PATH
+  default_token_filename: meeting_gmail_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.modify
+    - https://www.googleapis.com/auth/gmail.send
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Cornell TA supervision needs explicit Gmail OAuth on this machine.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Cornell TA supervision needs message metadata and participants.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Cornell TA supervision needs bounded snippets for classification.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Cornell TA supervision needs bounded body excerpts for timing decisions.
+  - action: connector.gmail.modify_labels
+    mode: allow
+    reason: Cornell TA supervision applies and clears SAI/Supervising.
+  - action: connector.gmail.send_message
+    mode: allow
+    reason: Cornell TA supervision may send a narrow direct check-in to the TAs only.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: Cornell TA supervision may DM Lutz when TAs do not respond in time.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Slack may need to resolve the DM target before posting.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: Cornell TA supervision sends a direct reminder to Lutz only when follow-up stalls.
+  - action: observability.run_store.read
+    mode: allow
+    reason: Cornell TA supervision needs prior per-thread supervision state.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

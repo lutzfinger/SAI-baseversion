@@ -6,6 +6,30 @@ import pytest
 
 from app.shared.config import Settings
 
+# Phase 3 follow-up: these tests were copied from private SAI but depend on
+# framework-divergent files (email_models, local_llm_classifier) or a richer
+# `test_settings` fixture that public's conftest doesn't yet provide.
+# Re-enable each as the framework/private split for that area lands.
+collect_ignore_glob = [
+    # Need framework-divergent reconciliation of email_models / local_llm_classifier
+    "test_langsmith.py",
+    "test_local_cloud_learning.py",
+    "test_slack_joke_workflow.py",
+    # Need richer test_settings fixture (private's conftest pattern, sanitized)
+    "test_approvals.py",
+    "test_background_services.py",
+    "test_calendar_connector.py",
+    "test_fact_memory.py",
+    "test_prompt_hashes.py",
+    "test_reflection.py",
+    "test_replay.py",
+    # Pollutes os.environ via load_runtime_env_best_effort(); breaks
+    # test_langsmith_settings until test isolation is added
+    "test_runtime_env.py",
+    # Returns empty taxonomy without private's taxonomy data
+    "test_gmail_taxonomy_labels.py",
+]
+
 
 @pytest.fixture
 def starter_settings(tmp_path: Path) -> Settings:

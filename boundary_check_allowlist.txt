@@ -17,3 +17,11 @@ PHASE-1-DONE.md
 app/shared/runtime_env.py
 # Framework code that parses keychain:// references. Must mention the scheme
 # name to do its job.
+
+PHASE-2-DONE.md
+# Phase 2 report documents the boundary linter's rules — must show examples
+# of what each rule catches.
+
+tests/runtime/test_boundary_check.py
+# Test file for the boundary linter. Must contain trigger examples for each
+# rule (otherwise it can't test them). Not real personal data.

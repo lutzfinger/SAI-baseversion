@@ -1,0 +1,100 @@
+policy_id: ai_audio_brief
+version: "1"
+description: Daily AI audio brief workflow with read-only Gmail intake, read-only OpenAI web search, text-to-speech generation, and controlled Slack delivery.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 1500
+  output_guard:
+    max_reason_chars: 240
+    enforce_message_id_match: true
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_AI_AUDIO_BRIEF_TOKEN_PATH
+  default_token_filename: ai_audio_brief_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+  allowed_channel_names:
+    - sai-newsletter
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: The operator explicitly authorizes Gmail access for the daily AI audio brief.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: The workflow needs Gmail metadata to classify and filter newsletters.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: The workflow needs Gmail snippets for classification and summarization.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: The workflow needs bounded email body excerpts for newsletter summarization.
+  - action: provider.openai.web_search
+    mode: allow
+    reason: The workflow uses OpenAI web search as a read-only AI news research source.
+  - action: provider.openai.responses_generate
+    mode: allow
+    reason: The workflow uses structured OpenAI generation for the spoken script.
+  - action: provider.openai.audio_speech
+    mode: allow
+    reason: The workflow generates one MP3 audio briefing from the final spoken script.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: The workflow uses an explicit Slack bot token to upload the audio briefing.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Resolving the configured Slack channel name may require channel metadata lookup.
+  - action: connector.slack.upload_file
+    mode: allow
+    reason: The workflow uploads the generated MP3 into one allowed Slack channel.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: If Slack file upload is unavailable, the workflow posts the transcript fallback.
+  - action: connector.web.*
+    mode: deny
+    reason: This workflow must never use direct browser or web connectors.
+  - action: connector.browser.*
+    mode: deny
+    reason: This workflow must never use browser automation.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

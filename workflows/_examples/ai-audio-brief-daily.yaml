@@ -1,0 +1,76 @@
+workflow_id: example_ai-audio-brief-daily
+version: "1"
+description: Read the last 24 hours of Gmail, summarize newsletter emails, research top AI news with OpenAI web search, create an audio brief, and deliver it to Slack.
+worker: ai_audio_brief
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 50
+  label_ids: []
+  query: 'label:"SAI/Newsletters" newer_than:1d'
+  assume_newsletter_messages: true
+  include_spam_trash: false
+policy: ai_audio_brief.yaml
+tags:
+  - gmail
+  - newsletters
+  - ai-news
+  - openai
+  - slack
+  - audio
+tools:
+  - tool_id: newsletter_summary_writer
+    kind: newsletter_summary_writer
+    prompt: newsletter/summary.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      timeout_seconds: 45
+      max_output_tokens: 180
+  - tool_id: ai_news_researcher
+    kind: ai_news_researcher
+    prompt: briefing/ai-news-research.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      timeout_seconds: 60
+      max_output_tokens: 900
+      max_stories: 6
+      search_context_size: high
+      allowed_domains:
+        - reuters.com
+        - bloomberg.com
+        - ft.com
+        - wsj.com
+        - cnbc.com
+        - nytimes.com
+        - theinformation.com
+        - theverge.com
+        - techcrunch.com
+        - wired.com
+  - tool_id: audio_brief_writer
+    kind: audio_brief_writer
+    prompt: briefing/audio-brief-script.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      timeout_seconds: 45
+      max_output_tokens: 1200
+  - tool_id: openai_speech_generator
+    kind: openai_speech_generator
+    provider: openai
+    model: gpt-4o-mini-tts
+    config:
+      voice: cedar
+      response_format: mp3
+      instructions: Calm, brisk, executive audio briefing voice.
+      timeout_seconds: 120
+      speed: 1.0
+  - tool_id: ai_audio_brief_slack_message
+    kind: slack_message_sender
+    config:
+      channel_name: sai-newsletter
+  - tool_id: ai_audio_brief_slack_uploader
+    kind: slack_file_sender
+    config:
+      channel_name: sai-newsletter

@@ -1,0 +1,55 @@
+workflow_id: example_travel-operation-execution
+version: "1"
+description: Execute one previously approved travel-operation plan with deterministic Gmail and Calendar actions plus Gemini review.
+worker: travel_operation_execution
+connector: runtime_only
+connector_config:
+  message_reference: ""
+  travel_operation_plan: {}
+  review_reply_channel: ""
+  review_reply_thread_ts: ""
+policy: travel_operation_execution.yaml
+tags:
+  - runtime
+  - travel
+  - approval
+  - gmail
+  - calendar
+tools:
+  - tool_id: travel_execution_attachment_ocr
+    kind: travel_attachment_ocr
+    prompt: travel/attachment-ocr.md
+    provider: openai
+    model: gpt-5.2
+    config:
+      max_output_tokens: 500
+      max_images: 3
+      timeout_seconds: 90
+  - tool_id: travel_itinerary_extractor
+    kind: travel_itinerary_extractor
+    prompt: travel/itinerary-extract.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 1200
+      timeout_seconds: 120
+  - tool_id: quickbooks_receipt_forwarder
+    kind: quickbooks_receipt_forwarder
+    config:
+      destination_email: someone@example.com
+  - tool_id: travel_route_researcher
+    kind: travel_route_researcher
+    prompt: travel/route-research.md
+    provider: openai
+    model: gpt-5.2
+    config:
+      max_output_tokens: 1000
+      timeout_seconds: 120
+      search_context_size: medium
+  - tool_id: travel_execution_reviewer
+    kind: travel_execution_reviewer
+    prompt: travel/execution-review.md
+    provider: gemini
+    model: gemini-2.5-pro
+  - tool_id: travel_execution_output_guard
+    kind: text_output_guard

@@ -1,0 +1,26 @@
+workflow_id: example_sai-email-interaction
+version: "2"
+description: Read new emails sent to SAI, reply with a question or approval-backed proposal, and execute only after explicit email approval.
+worker: sai_email_interaction
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 25
+  label_ids: []
+  query: "from:you@example.com (to:agent@example.com OR cc:agent@example.com) newer_than:14d"
+  include_spam_trash: false
+policy: sai_email_interaction.yaml
+tags:
+  - gmail
+  - approval
+  - operator
+  - sai-input
+tools:
+  - tool_id: sai_email_generic_planner
+    kind: sai_email_generic_planner
+    prompt: sai_email/plan.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 1400
+      timeout_seconds: 120

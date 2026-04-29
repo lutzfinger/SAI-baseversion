@@ -1,0 +1,13 @@
+workflow_id: example_linkedin-archive-request
+version: "1"
+description: Open the LinkedIn data export request flow in a visible browser and submit the larger archive request.
+worker: linkedin_archive_request
+connector: runtime_only
+connector_config: {}
+policy: linkedin_archive_request.yaml
+tags:
+  - linkedin
+  - browser
+  - approval-only
+  - manual-login
+tools: []

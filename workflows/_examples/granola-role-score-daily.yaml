@@ -1,0 +1,18 @@
+workflow_id: example_granola-role-score-daily
+version: "1"
+description: Aggregate daily Granola coaching scores by role and post them to Slack.
+worker: granola_score_summary
+connector: runtime_only
+connector_config:
+  cadence: daily
+policy: granola_score_summary.yaml
+tags:
+  - granola
+  - coaching
+  - reporting
+  - daily
+tools:
+  - tool_id: granola_score_summary_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general

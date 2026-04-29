@@ -1,0 +1,26 @@
+workflow_id: example_invoice-forward-quickbooks-daily
+version: "1"
+description: Forward tagged invoice receipts from allowlisted vendors to the QuickBooks expenses mailbox.
+worker: invoice_forward
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 25
+  label_ids: []
+  query: 'label:"L1/Invoices" newer_than:90d'
+  include_spam_trash: false
+policy: invoice_forward.yaml
+tags:
+  - gmail
+  - invoices
+  - quickbooks
+  - finance
+tools:
+  - tool_id: invoice_allowlist
+    kind: invoice_allowlist_checker
+    config:
+      whitelist_path: config/invoice-forward-whitelist.yaml
+  - tool_id: quickbooks_receipt_forwarder
+    kind: quickbooks_receipt_forwarder
+    config:
+      destination_email: someone@example.com

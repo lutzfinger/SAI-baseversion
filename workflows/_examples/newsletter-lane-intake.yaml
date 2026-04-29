@@ -1,0 +1,20 @@
+workflow_id: example_newsletter-lane-intake
+version: "1"
+description: >
+  Record one operator-approved newsletter lane rule so similar messages skip the
+  inbox and route directly into the dedicated newsletter lane.
+worker: newsletter_lane_intake
+connector: runtime_only
+connector_config:
+  message_reference: ""
+  newsletter_route: keep
+  newsletter_match_scope: sender_email
+  correction_reason: ""
+  requested_by: ""
+policy: newsletter_lane_intake.yaml
+tags:
+  - newsletters
+  - approval-only
+  - routing
+  - slack
+tools: []
