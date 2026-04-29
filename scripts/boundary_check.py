@@ -145,6 +145,11 @@ def scan_line(relpath: str, line_no: int, line: str) -> list[Violation]:
         domain = match.group(1).lower()
         if domain in PLACEHOLDER_EMAIL_DOMAINS:
             continue
+        # IANA-reserved .example TLD (RFC 2606) — any *.example domain is
+        # a documentation placeholder. Lets templates use distinctive made-up
+        # company names like pied-piper.example, hooli.example, etc.
+        if domain.endswith(".example"):
+            continue
         violations.append(Violation(relpath, line_no, "email-non-placeholder",
                                     match.group(0)))
 
