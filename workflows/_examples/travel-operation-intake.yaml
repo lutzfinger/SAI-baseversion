@@ -1,0 +1,56 @@
+workflow_id: example_travel-operation-intake
+version: "1"
+description: Read operator emails sent to SAI, build a governed travel-operation plan, critique it, and queue approval.
+worker: travel_operation_intake
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 10
+  label_ids:
+    - INBOX
+  query: "in:inbox to:agent@example.com newer_than:14d"
+  include_spam_trash: false
+policy: travel_operation_intake.yaml
+tags:
+  - gmail
+  - travel
+  - approval
+  - planning
+tools:
+  - tool_id: travel_request_input_guard
+    kind: input_guard
+    provider: ollama
+    model: llama-guard3:1b
+  - tool_id: travel_request_attachment_ocr
+    kind: travel_attachment_ocr
+    prompt: travel/attachment-ocr.md
+    provider: openai
+    model: gpt-5.2
+    config:
+      max_output_tokens: 500
+      max_images: 3
+      timeout_seconds: 90
+  - tool_id: travel_plan_builder
+    kind: travel_plan_builder
+    prompt: travel/plan-build.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 1500
+      timeout_seconds: 120
+  - tool_id: travel_plan_critic
+    kind: travel_plan_critic
+    prompt: travel/plan-critique.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 900
+      timeout_seconds: 120
+  - tool_id: travel_plan_reviser
+    kind: travel_plan_reviser
+    prompt: travel/plan-revise.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 2200
+      timeout_seconds: 120

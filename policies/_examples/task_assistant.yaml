@@ -1,0 +1,75 @@
+policy_id: task_assistant
+version: "1"
+description: >
+  Interactive propose-first task assistant. It may plan any request, but it may
+  only execute a small allowlisted action set after explicit human approval.
+default_mode: deny
+redaction:
+  masked_email_keys:
+    - from_email
+    - to
+    - cc
+  truncated_keys:
+    - body
+    - text
+rules:
+  - action: tool.task.plan
+    mode: allow
+    reason: Task assistant may generate a structured plan.
+  - action: task.execute.run_workflow.email-triage-gmail
+    mode: allow
+    reason: Task assistant may run the read-only Gmail triage workflow after approval.
+  - action: task.execute.run_workflow.reply-planning-daily
+    mode: allow
+    reason: Task assistant may run the draft-only reply planning workflow after approval.
+  - action: task.execute.run_workflow.meeting-followup-intake-draft-only
+    mode: allow
+    reason: Task assistant may run the draft-only meeting follow-up workflow after approval.
+  - action: task.execute.run_workflow.contact-investigation-daily
+    mode: allow
+    reason: Task assistant may run contact investigation after approval.
+  - action: task.execute.run_workflow.newsletter-summary-daily
+    mode: allow
+    reason: Task assistant may run newsletter summarization after approval.
+  - action: task.execute.run_workflow.ai-audio-brief-daily
+    mode: allow
+    reason: Task assistant may run the AI audio brief workflow after approval.
+  - action: task.execute.run_workflow.linkedin-archive-request
+    mode: allow
+    reason: Task assistant may open the manual LinkedIn archive request workflow after approval.
+  - action: task.execute.run_workflow.classification-correction-intake
+    mode: allow
+    reason: Task assistant may record operator-approved classification corrections after approval.
+  - action: task.execute.run_workflow.classification-alignment-intake
+    mode: allow
+    reason: Task assistant may record operator-approved prompt-and-dataset classification alignments after approval.
+  - action: task.execute.run_workflow.newsletter-lane-intake
+    mode: allow
+    reason: Task assistant may record operator-approved newsletter lane rules after approval.
+  - action: task.execute.run_workflow.keyword-route-intake
+    mode: allow
+    reason: Task assistant may record operator-approved deterministic email routing rules after approval.
+  - action: task.execute.run_workflow.travel-operation-execution
+    mode: allow
+    reason: Task assistant may execute an operator-approved travel plan after approval.
+  - action: task.execute.create_gmail_draft
+    mode: allow
+    reason: Task assistant may create Gmail drafts after approval.
+  - action: connector.gmail.create_draft
+    mode: allow
+    reason: Task assistant draft execution writes Gmail drafts only.
+  - action: task.execute.post_slack_message
+    mode: allow
+    reason: Task assistant may post narrow operational Slack messages after approval.
+  - action: task.execute.ask_slack_question
+    mode: allow
+    reason: Task assistant may ask follow-up questions in Slack after approval.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: Slack posting requires bot authentication.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Slack channel-name resolution requires metadata lookup.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: Task assistant may post into allowed Slack channels only.

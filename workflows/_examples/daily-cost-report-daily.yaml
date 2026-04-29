@@ -1,0 +1,29 @@
+workflow_id: example_daily-cost-report-daily
+version: "1"
+description: Fetch yesterday's OpenAI and Gemini provider costs and post one Slack summary.
+worker: daily_cost_report
+connector: runtime_only
+connector_config: {}
+policy: daily_cost_report.yaml
+tags:
+  - costs
+  - slack
+  - openai
+  - gemini
+tools:
+  - tool_id: openai_daily_cost_reader
+    kind: openai_cost_reader
+    provider: openai
+    config:
+      timeout_seconds: 30
+  - tool_id: gemini_daily_cost_reader
+    kind: gemini_cost_reader
+    provider: google_cloud
+    config:
+      timeout_seconds: 45
+      service_descriptions:
+        - Gemini API
+  - tool_id: daily_cost_report_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general

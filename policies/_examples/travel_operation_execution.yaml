@@ -1,0 +1,88 @@
+policy_id: travel_operation_execution
+version: "1"
+description: Approval-backed execution workflow for governed travel operations.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - html_text
+    - reasoning
+    - snippet
+    - subject
+  output_guard:
+    max_text_chars: 900
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_NEWSLETTER_TOKEN_PATH
+  default_token_filename: newsletter_unsubscribe_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.send
+calendar:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_MEETING_CALENDAR_TOKEN_PATH
+  default_token_filename: travel_calendar_token.json
+  allowed_scopes:
+    - https://www.googleapis.com/auth/calendar.readonly
+    - https://www.googleapis.com/auth/calendar.events
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Approved travel execution uses Gmail for booking lookup and filing.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Approved travel execution needs booking metadata.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Approved travel execution needs bounded snippets while resolving bookings.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Approved travel execution needs bounded bodies and attachment text.
+  - action: connector.gmail.send_message
+    mode: allow
+    reason: Approved travel execution forwards the chosen booking to QuickBooks.
+  - action: connector.calendar.authenticate
+    mode: allow
+    reason: Approved travel execution needs Calendar OAuth on this machine.
+  - action: connector.calendar.read_events
+    mode: allow
+    reason: Approved travel execution reads prior events and narrow delete candidates.
+  - action: connector.calendar.write_events
+    mode: allow
+    reason: Approved travel execution creates the new flight event and deletes the obsolete one.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

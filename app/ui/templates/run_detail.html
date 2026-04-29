@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ run.run_id }}</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --panel: rgba(255, 253, 247, 0.95);
+        --ink: #18222f;
+        --muted: #67727d;
+        --line: #d7d0c4;
+        --accent: #155e63;
+        --accent-soft: #d9efee;
+        --warning: #9f4f17;
+        --warning-soft: #f8e6d1;
+        --danger: #9a2f2f;
+        --danger-soft: #f8dddd;
+        --shadow: 0 14px 34px rgba(24, 34, 47, 0.07);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(21, 94, 99, 0.12), transparent 24%),
+          linear-gradient(180deg, #fbfaf7, var(--bg));
+        color: var(--ink);
+      }
+
+      .shell {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 28px 20px 56px;
+      }
+
+      .back {
+        display: inline-block;
+        margin-bottom: 18px;
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 20px;
+        box-shadow: var(--shadow);
+      }
+
+      .span-4 {
+        grid-column: span 4;
+      }
+
+      .span-8 {
+        grid-column: span 8;
+      }
+
+      .span-12 {
+        grid-column: span 12;
+      }
+
+      h1,
+      h2 {
+        margin-top: 0;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .summary-card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fffdf8;
+      }
+
+      .summary-card .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .summary-card strong,
+      .summary-card code {
+        display: block;
+        font-size: 0.96rem;
+        overflow-wrap: anywhere;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.88rem;
+        font-weight: 700;
+      }
+
+      .status::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .status.failed {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .status.approval_required {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      pre,
+      code {
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      }
+
+      pre {
+        margin: 0;
+        background: #f2ede4;
+        padding: 14px;
+        border-radius: 16px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: #f2ede4;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .runtime-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .runtime-row {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fffdf8;
+      }
+
+      .runtime-row .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      .event-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .event-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: #fffdf8;
+      }
+
+      .event-head {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr 0.8fr;
+        gap: 12px;
+        margin-bottom: 10px;
+        align-items: start;
+      }
+
+      .event-meta {
+        display: grid;
+        gap: 3px;
+      }
+
+      .event-meta .label {
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .event-meta strong,
+      .event-meta code,
+      .event-meta span {
+        overflow-wrap: anywhere;
+      }
+
+      @media (max-width: 1024px) {
+        .span-4,
+        .span-8 {
+          grid-column: span 12;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .summary {
+          grid-template-columns: 1fr;
+        }
+
+        .event-head {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <a class="back" href="/">Back to dashboard</a>
+
+      <section class="grid">
+        <article class="panel span-8">
+          <h1>{{ run.run_id }}</h1>
+          <div class="summary">
+            <div class="summary-card">
+              <span class="label">Workflow</span>
+              <code>{{ run.workflow_id }}</code>
+            </div>
+            <div class="summary-card">
+              <span class="label">Status</span>
+              <span class="status {{ run.status }}">{{ run.status }}</span>
+            </div>
+            <div class="summary-card">
+              <span class="label">Started</span>
+              <strong>{{ run.started_at }}</strong>
+            </div>
+            <div class="summary-card">
+              <span class="label">Updated</span>
+              <strong>{{ run.updated_at }}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-4">
+          <h2>Runtime</h2>
+          <div class="runtime-list">
+            <div class="runtime-row">
+              <span class="label">Workflow engine</span>
+              <code>{{ artifact.runtime.workflow_engine if artifact and artifact.runtime else run.summary.workflow_engine }}</code>
+            </div>
+            <div class="runtime-row">
+              <span class="label">Node runtime</span>
+              <code>{{ artifact.runtime.node_runtime if artifact and artifact.runtime else "unknown" }}</code>
+            </div>
+            <div class="runtime-row">
+              <span class="label">Checkpoint backend</span>
+              <code>{{ artifact.runtime.checkpoint_backend if artifact and artifact.runtime else "unknown" }}</code>
+            </div>
+            <div class="runtime-row">
+              <span class="label">Checkpoint path</span>
+              <code>{{ artifact.runtime.checkpoint_path if artifact and artifact.runtime else "not recorded" }}</code>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 18px;">
+        <article class="panel span-4">
+          <h2>Run Summary</h2>
+          <pre>{{ run.summary | tojson(indent=2) }}</pre>
+        </article>
+
+        <article class="panel span-8">
+          <h2>Artifact</h2>
+          {% if artifact %}
+          <pre>{{ artifact | tojson(indent=2) }}</pre>
+          {% else %}
+          <p class="muted">No artifact was written for this run.</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <section class="panel" style="margin-top: 18px;">
+        <h2>Audit Events</h2>
+        <div class="event-list">
+          {% for event in events %}
+          <article class="event-card">
+            <div class="event-head">
+              <div class="event-meta">
+                <span class="label">Event</span>
+                <code>{{ event.event_type }}</code>
+                <span>{{ event.timestamp }}</span>
+              </div>
+              <div class="event-meta">
+                <span class="label">Component</span>
+                <strong>{{ event.component }}</strong>
+              </div>
+              <div class="event-meta">
+                <span class="label">Actor</span>
+                <strong>{{ event.actor }}</strong>
+              </div>
+            </div>
+            <pre>{{ event.payload | tojson(indent=2) }}</pre>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

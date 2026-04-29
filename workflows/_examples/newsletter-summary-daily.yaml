@@ -1,0 +1,31 @@
+workflow_id: example_newsletter-summary-daily
+version: "1"
+description: Read daily Gmail newsletters, summarize each in 160 characters to Slack, then archive the thread from Inbox.
+worker: newsletter_summary
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 25
+  label_ids: []
+  query: 'label:"SAI/Newsletters" newer_than:2d'
+  assume_newsletter_messages: true
+  include_spam_trash: false
+policy: newsletter_summary.yaml
+tags:
+  - gmail
+  - newsletters
+  - slack
+  - archive
+tools:
+  - tool_id: newsletter_summary_writer
+    kind: newsletter_summary_writer
+    prompt: newsletter/summary.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      timeout_seconds: 45
+      max_output_tokens: 180
+  - tool_id: newsletter_slack_sender
+    kind: slack_message_sender
+  - tool_id: newsletter_thread_archiver
+    kind: gmail_thread_archiver

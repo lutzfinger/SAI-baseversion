@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAI Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f3ec;
+        --panel: rgba(255, 252, 245, 0.94);
+        --panel-strong: #fffdf8;
+        --ink: #192230;
+        --muted: #61707b;
+        --line: #d8d0c1;
+        --accent: #145e63;
+        --accent-soft: #d8eeec;
+        --accent-deep: #0d4549;
+        --warning: #9f4f17;
+        --warning-soft: #f7e5d2;
+        --danger: #922f2f;
+        --danger-soft: #f8dddd;
+        --shadow: 0 16px 40px rgba(25, 34, 48, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(20, 94, 99, 0.17), transparent 24%),
+          radial-gradient(circle at top right, rgba(159, 79, 23, 0.08), transparent 18%),
+          linear-gradient(180deg, #fcfbf8 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+
+      .shell {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) auto;
+        gap: 24px;
+        align-items: end;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        color: var(--accent-deep);
+        font-size: 0.86rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 30px;
+        height: 2px;
+        background: var(--accent);
+        border-radius: 999px;
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(2.35rem, 4vw, 3.55rem);
+        line-height: 0.98;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 780px;
+        color: var(--muted);
+        font-size: 1.04rem;
+        line-height: 1.55;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: end;
+      }
+
+      .actions button {
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, var(--accent), #1b737a);
+        color: white;
+        cursor: pointer;
+        font-size: 0.96rem;
+        font-weight: 700;
+        box-shadow: 0 12px 24px rgba(20, 94, 99, 0.18);
+      }
+
+      .actions button.secondary,
+      .table-actions button.secondary {
+        background: linear-gradient(135deg, #f0ece4, #e4ddd1);
+        color: var(--ink);
+        box-shadow: none;
+      }
+
+      .actions .hint {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 20px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(8px);
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 1.1rem;
+      }
+
+      .panel p {
+        margin-top: 0;
+      }
+
+      .span-5 {
+        grid-column: span 5;
+      }
+
+      .span-7 {
+        grid-column: span 7;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+
+      .span-12 {
+        grid-column: span 12;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .stat {
+        padding: 14px;
+        border-radius: 16px;
+        background: linear-gradient(180deg, var(--accent-soft), rgba(216, 238, 236, 0.7));
+        border: 1px solid rgba(20, 94, 99, 0.1);
+      }
+
+      .stat .label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 1.35rem;
+        line-height: 1.1;
+      }
+
+      .runtime-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .runtime-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: var(--panel-strong);
+        border: 1px solid var(--line);
+      }
+
+      .runtime-card .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .runtime-card strong,
+      .runtime-card code {
+        font-size: 0.96rem;
+      }
+
+      .runtime-card code {
+        display: block;
+        padding: 0;
+        background: transparent;
+        border-radius: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 0.94rem;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+
+      th {
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent-deep);
+        font-size: 0.88rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .status::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.8;
+      }
+
+      .status.failed {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .status.approval_required {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .status.disabled {
+        background: #ece7dd;
+        color: #645f58;
+      }
+
+      code {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 8px;
+        background: #f0ece4;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .empty {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .run-link {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .run-link .meta {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .workflow-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      .table-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .table-actions button {
+        border: 0;
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: linear-gradient(135deg, var(--accent), #1b737a);
+        color: white;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: #f1ece3;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      @media (max-width: 1080px) {
+        .span-5,
+        .span-6,
+        .span-7 {
+          grid-column: span 12;
+        }
+      }
+
+      @media (max-width: 780px) {
+        .hero {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
+
+        .actions {
+          justify-content: start;
+        }
+
+        .stats,
+        .runtime-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Local Control Plane</div>
+          <h1>Secure Agent Infrastructure</h1>
+          <p>
+            Local-first orchestration with explicit policy gates, append-only audit logs,
+            LangGraph state machines, Runnable tool nodes, and optional redacted LangSmith tracing.
+          </p>
+        </div>
+        <div class="actions">
+          {% for workflow in workflows %}
+          {% if workflow.connector == "gmail_api" %}
+          <button type="button" class="secondary" onclick="authenticateWorkflow('{{ workflow.workflow_id }}')">
+            Authenticate Gmail
+          </button>
+          {% endif %}
+          <button type="button" onclick="runWorkflow('{{ workflow.workflow_id }}')">
+            Run {{ workflow.workflow_id }}
+          </button>
+          {% endfor %}
+          <div class="hint">Runs stay local unless LangSmith is explicitly enabled.</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel span-5">
+          <h2>System Status</h2>
+          <div class="stats">
+            <div class="stat">
+              <span class="label">Environment</span>
+              <strong>{{ status.environment }}</strong>
+            </div>
+            <div class="stat">
+              <span class="label">Workflow engine</span>
+              <strong>{{ status.workflow_engine }}</strong>
+            </div>
+            <div class="stat">
+              <span class="label">Runs</span>
+              <strong>{{ status.run_count }}</strong>
+            </div>
+            <div class="stat">
+              <span class="label">Pending approvals</span>
+              <strong>{{ status.pending_approvals }}</strong>
+            </div>
+            <div class="stat">
+              <span class="label">Completed</span>
+              <strong>{{ status.completed_runs }}</strong>
+            </div>
+            <div class="stat">
+              <span class="label">Failed</span>
+              <strong>{{ status.failed_runs }}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel span-7">
+          <h2>Runtime Layers</h2>
+          <p class="subtle">
+            The control plane stays explicit and local. Workflow execution is delegated to
+            LangGraph with Runnable-based nodes and local SQLite checkpointing.
+          </p>
+          <div class="runtime-grid">
+            <div class="runtime-card">
+              <span class="label">StateGraph</span>
+              <strong>{{ status.workflow_engine }}</strong>
+            </div>
+            <div class="runtime-card">
+              <span class="label">Runnable nodes</span>
+              <strong>{{ status.node_runtime }}</strong>
+            </div>
+            <div class="runtime-card">
+              <span class="label">Checkpoint backend</span>
+              <strong>{{ status.checkpoint_backend }}</strong>
+              <code>{{ status.checkpoint_path }}</code>
+            </div>
+            <div class="runtime-card">
+              <span class="label">LangSmith</span>
+              {% if status.langsmith_tracing_enabled %}
+              <span class="status">enabled</span>
+              <div class="workflow-meta">
+                <span class="pill">{{ status.langsmith_project }}</span>
+              </div>
+              {% else %}
+              <span class="status disabled">disabled</span>
+              <div class="workflow-meta">
+                <span class="pill">opt-in only</span>
+                <span class="pill">redacted before export</span>
+              </div>
+              {% endif %}
+            </div>
+            <div class="runtime-card">
+              <span class="label">Local Guard</span>
+              {% if status.local_guard_available %}
+              <span class="status">available</span>
+              {% else %}
+              <span class="status failed">unavailable</span>
+              {% endif %}
+              <div class="workflow-meta">
+                {% if status.local_guard_provider %}
+                <span class="pill">{{ status.local_guard_provider }}</span>
+                {% endif %}
+                {% if status.local_guard_model %}
+                <span class="pill">{{ status.local_guard_model }}</span>
+                {% endif %}
+              </div>
+              {% if status.local_guard_warning %}
+              <p class="subtle" style="margin-top: 10px;">{{ status.local_guard_warning }}</p>
+              {% elif status.local_guard_host %}
+              <code>{{ status.local_guard_host }}</code>
+              {% endif %}
+            </div>
+            <div class="runtime-card">
+              <span class="label">Local LLM</span>
+              {% if status.local_llm_available %}
+              <span class="status">available</span>
+              {% else %}
+              <span class="status failed">unavailable</span>
+              {% endif %}
+              <div class="workflow-meta">
+                {% if status.local_llm_provider %}
+                <span class="pill">{{ status.local_llm_provider }}</span>
+                {% endif %}
+                {% if status.local_llm_model %}
+                <span class="pill">{{ status.local_llm_model }}</span>
+                {% endif %}
+              </div>
+              {% if status.local_llm_warning %}
+              <p class="subtle" style="margin-top: 10px;">{{ status.local_llm_warning }}</p>
+              {% elif status.local_llm_host %}
+              <code>{{ status.local_llm_host }}</code>
+              {% endif %}
+            </div>
+            <div class="runtime-card">
+              <span class="label">Cloud Escalation</span>
+              {% if status.cloud_llm_available %}
+              <span class="status">available</span>
+              {% else %}
+              <span class="status failed">unavailable</span>
+              {% endif %}
+              <div class="workflow-meta">
+                {% if status.cloud_llm_provider %}
+                <span class="pill">{{ status.cloud_llm_provider }}</span>
+                {% endif %}
+                {% if status.cloud_llm_model %}
+                <span class="pill">{{ status.cloud_llm_model }}</span>
+                {% endif %}
+              </div>
+              {% if status.cloud_llm_warning %}
+              <p class="subtle" style="margin-top: 10px;">{{ status.cloud_llm_warning }}</p>
+              {% elif status.cloud_llm_host %}
+              <code>{{ status.cloud_llm_host }}</code>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 18px;">
+        <article class="panel span-12">
+          <h2>Available Workflows</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 22%;">ID</th>
+                <th style="width: 16%;">Worker</th>
+                <th style="width: 14%;">Connector</th>
+                <th style="width: 16%;">Runtime</th>
+                <th style="width: 12%;">Tools</th>
+                <th style="width: 12%;">Policy</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for workflow in workflows %}
+              <tr>
+                <td><code>{{ workflow.workflow_id }}</code></td>
+                <td>{{ workflow.worker }}</td>
+                <td>{{ workflow.connector }}</td>
+                <td>
+                  <div class="workflow-meta">
+                    <span class="pill">{{ status.workflow_engine }}</span>
+                    <span class="pill">{{ status.node_runtime }}</span>
+                  </div>
+                </td>
+                <td>{{ workflow.tools | length }} declared steps</td>
+                <td>{{ workflow.policy }}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if workflow.connector == "gmail_api" %}
+                    <button type="button" class="secondary" onclick="authenticateWorkflow('{{ workflow.workflow_id }}')">
+                      Authenticate
+                    </button>
+                    {% endif %}
+                    <button type="button" onclick="runWorkflow('{{ workflow.workflow_id }}')">Run</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 18px;">
+        <article class="panel span-7">
+          <h2>Recent Runs</h2>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 48%;">Run</th>
+                <th style="width: 18%;">Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for run in runs %}
+              <tr>
+                <td>
+                  <a class="run-link" href="/runs/{{ run.run_id }}">
+                    <code>{{ run.run_id }}</code>
+                    <span class="meta">{{ run.summary.workflow_engine or status.workflow_engine }}</span>
+                  </a>
+                </td>
+                <td><span class="status {{ run.status }}">{{ run.status }}</span></td>
+                <td>{{ run.updated_at }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel span-5">
+          <h2>Approvals</h2>
+          {% if approvals %}
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40%;">Request</th>
+                <th style="width: 34%;">Action</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for approval in approvals %}
+              <tr>
+                <td><code>{{ approval.request_id }}</code></td>
+                <td>{{ approval.action }}</td>
+                <td><span class="status {{ approval.status }}">{{ approval.status }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="empty">No approval requests have been created yet.</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <section class="grid" style="margin-top: 18px;">
+        <article class="panel span-12">
+          <h2>Reflection Reports</h2>
+          {% if reports %}
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 18%;">Workflow</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for report in reports %}
+              <tr>
+                <td><code>{{ report.workflow_id }}</code></td>
+                <td>{{ report.summary }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="empty">
+            No reflection reports yet. Trigger one through the API after a run completes.
+          </p>
+          {% endif %}
+        </article>
+      </section>
+    </main>
+
+    <script>
+      async function runWorkflow(workflowId) {
+        const response = await fetch(`/api/workflows/${workflowId}/run`, { method: "POST" });
+        if (!response.ok) {
+          const payload = await response.json();
+          alert(payload.detail || "Workflow failed");
+          return;
+        }
+        const payload = await response.json();
+        window.location.href = `/runs/${payload.run_id}`;
+      }
+
+      async function authenticateWorkflow(workflowId) {
+        const response = await fetch(`/api/workflows/${workflowId}/authenticate`, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) {
+          alert(payload.detail || "Authentication failed");
+          return;
+        }
+        const tokenPath = payload.token_path || "local token file";
+        alert(`Gmail authentication is ready. Token saved to ${tokenPath}.`);
+      }
+    </script>
+  </body>
+</html>

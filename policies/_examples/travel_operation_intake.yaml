@@ -1,0 +1,66 @@
+policy_id: travel_operation_intake
+version: "1"
+description: Read-only planning workflow for travel-operation emails sent to SAI.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - html_text
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 5000
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_TOKEN_PATH
+  default_token_filename: travel_gmail_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Travel planning reads a bounded Gmail request mailbox slice.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Travel planning needs message metadata and headers.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Travel planning needs snippets for fast bounded context.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Travel planning needs bounded bodies and attachment text.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

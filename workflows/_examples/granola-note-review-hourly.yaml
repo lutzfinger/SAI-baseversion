@@ -1,0 +1,54 @@
+workflow_id: example_granola-note-review-hourly
+version: "1"
+description: Import newly created Granola notes, classify Lutz's role, coach performance, and update local stores.
+worker: granola_note_review
+connector: runtime_only
+connector_config: {}
+policy: granola_note_review.yaml
+tags:
+  - granola
+  - coaching
+  - classification
+  - hourly
+tools:
+  - tool_id: granola_note_reader
+    kind: granola_note_reader
+    provider: granola
+    model: personal-api
+    config:
+      max_results: 100
+      list_path: /v1/notes
+      note_path_template: /v1/notes/{note_id}
+  - tool_id: granola_role_input_guard
+    kind: text_input_guard
+    provider: ollama
+    model: llama-guard3:1b
+  - tool_id: granola_role_local_classifier
+    kind: granola_role_local_classifier
+    prompt: granola/role-classify-local.md
+    provider: ollama
+    model: gpt-oss:20b
+    config:
+      max_output_tokens: 900
+  - tool_id: granola_role_cloud_classifier
+    kind: granola_role_cloud_classifier
+    prompt: granola/role-classify-cloud.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 900
+      timeout_seconds: 90
+  - tool_id: granola_role_coach
+    kind: granola_role_coach
+    prompt: granola/role-coach.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      max_output_tokens: 800
+      timeout_seconds: 90
+  - tool_id: granola_role_output_guard
+    kind: text_output_guard
+  - tool_id: granola_review_success_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general

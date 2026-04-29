@@ -1,0 +1,111 @@
+policy_id: newsletter_unsubscribe
+version: "1"
+description: Controlled newsletter unsubscribe workflow with strict Gmail send, same-site web restrictions, and isolated browser fallback.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - delivered_to
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 1500
+  output_guard:
+    max_reason_chars: 240
+    enforce_message_id_match: true
+  evaluator:
+    key: classification_consistency
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_NEWSLETTER_TOKEN_PATH
+  default_token_filename: newsletter_unsubscribe_token.json
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+    - https://www.googleapis.com/auth/gmail.send
+web:
+  allowed_form_methods:
+    - GET
+    - POST
+  allowed_content_types:
+    - text/html
+    - text/plain
+  timeout_seconds: 10
+  max_response_bytes: 50000
+  max_text_chars: 4000
+  max_redirects: 2
+  block_private_networks: true
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+  allowed_channel_names:
+    - newsletters
+    - sai-unsubscribe
+    - #general
+rules:
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: The operator explicitly authorizes the Gmail mailbox before newsletter unsubscribe runs.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Newsletter detection needs sender and header metadata.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Newsletter detection needs bounded snippet text.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Newsletter detection needs bounded body excerpts to find unsubscribe links.
+  - action: connector.gmail.send_message
+    mode: allow
+    reason: Mailto unsubscribe requires sending a narrow plain-text unsubscribe email.
+  - action: connector.web.read_page
+    mode: allow
+    reason: The workflow may read only the same-site unsubscribe page linked from the email.
+  - action: connector.web.submit_form
+    mode: allow
+    reason: The workflow may submit only a same-site unsubscribe form with the resolved recipient email and hidden fields.
+  - action: connector.browser.unsubscribe
+    mode: allow
+    reason: A last-resort unsubscribe may use an isolated Chromium session restricted to the exact unsubscribe origin and unsubscribe-only clicks.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: The workflow uses an explicit Slack bot token to post unsubscribe confirmations.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Resolving the configured unsubscribe channel name may require channel metadata lookup.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: The workflow posts one short Slack note after each successful unsubscribe.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

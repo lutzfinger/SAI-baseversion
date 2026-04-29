@@ -1,0 +1,38 @@
+workflow_id: example_newsletter-lane-gmail-tagging
+version: "1"
+description: >
+  Deterministically route inbox newsletters into dedicated SAI Gmail lanes,
+  keep allowlisted newsletters, and immediately attempt unsubscribe for
+  everything else without sending the message through the expensive taxonomy
+  classifier.
+worker: newsletter_lane
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 50
+  label_ids:
+    - INBOX
+  query: newer_than:7d
+  include_spam_trash: false
+policy: newsletter_lane_tagging.yaml
+tags:
+  - gmail
+  - newsletters
+  - tagging
+  - unsubscribe
+tools:
+  - tool_id: newsletter_allowlist
+    kind: newsletter_allowlist_checker
+    config:
+      whitelist_path: config/newsletter-whitelist.yaml
+  - tool_id: newsletter_lane_labeler
+    kind: gmail_thread_labeler
+  - tool_id: newsletter_unsubscribe
+    kind: newsletter_unsubscribe_executor
+    config:
+      enable_browser_fallback: true
+      browser_headless: true
+  - tool_id: newsletter_unsubscribe_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: sai-unsubscribe

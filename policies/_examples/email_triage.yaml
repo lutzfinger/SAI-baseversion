@@ -1,0 +1,92 @@
+policy_id: email_triage_read_only
+version: "1"
+description: Read-only email classification workflow. External side effects are blocked.
+default_mode: deny
+redaction:
+  snippet_max_chars: 160
+  full_redaction_keys:
+    - access_token
+    - authorization
+    - cookie
+    - cookies
+    - password
+    - refresh_token
+    - token
+  masked_email_keys:
+    - bcc
+    - cc
+    - email
+    - from_email
+    - sender
+    - to
+  truncated_keys:
+    - body
+    - body_excerpt
+    - reasoning
+    - snippet
+    - subject
+  input_guard:
+    fail_closed: false
+    max_snippet_chars_for_llm: 500
+    max_body_chars_for_llm: 1500
+  output_guard:
+    max_reason_chars: 240
+    enforce_message_id_match: true
+  evaluator:
+    key: classification_consistency
+gmail:
+  allowed_env_keys:
+    credentials_path: SAI_GMAIL_CREDENTIALS_PATH
+    client_id: SAI_GMAIL_CLIENT_ID
+    client_secret: SAI_GMAIL_CLIENT_SECRET
+    refresh_token: SAI_GMAIL_REFRESH_TOKEN
+    token_path: SAI_GMAIL_TOKEN_PATH
+  allowed_mailbox_domains:
+    - example_user.com
+  allowed_mailbox_accounts:
+    - someone@example.com
+  allowed_scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+linkedin:
+  allowed_env_keys:
+    dataset_path: SAI_LINKEDIN_DATASET_PATH
+rules:
+  - action: connector.email.read_metadata
+    mode: allow
+    reason: Metadata is required for local classification.
+  - action: connector.email.read_snippet
+    mode: allow
+    reason: Snippet previews are required for urgency detection.
+  - action: connector.email.read_body
+    mode: allow
+    reason: Bounded body excerpts improve meeting-request detection without attachments.
+  - action: connector.gmail.authenticate
+    mode: allow
+    reason: Live Gmail testing uses explicit local OAuth and read-only scopes.
+  - action: connector.gmail.read_metadata
+    mode: allow
+    reason: Gmail metadata is required for live classification.
+  - action: connector.gmail.read_snippet
+    mode: allow
+    reason: Gmail snippet previews are required for live urgency detection.
+  - action: connector.gmail.read_body
+    mode: allow
+    reason: Bounded Gmail body excerpts improve meeting-request detection without attachments.
+  - action: connector.gmail.read_history
+    mode: allow
+    reason: Other-to-personal routing checks prior Gmail contact history before leaving a human thread in Other.
+  - action: connector.linkedin.read_dataset
+    mode: allow
+    reason: Other-to-personal routing may consult the local LinkedIn export as weak relationship evidence.
+  - action: connector.gmail.modify_*
+    mode: deny
+    reason: Read-only classification must never mutate the mailbox.
+  - action: connector.browser.*
+    mode: deny
+    reason: Read-only classification must never invoke browser automation.
+  - action: prompts.*
+    mode: deny
+    reason: Runtime workflows must never modify prompts.
+  - action: policies.*
+    mode: deny
+    reason: Runtime workflows must never modify policies.

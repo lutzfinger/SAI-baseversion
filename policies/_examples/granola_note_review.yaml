@@ -1,0 +1,29 @@
+policy_id: granola_note_review
+version: "1"
+description: Read Granola notes, classify Lutz's role, coach performance, and post operational updates.
+default_mode: deny
+redaction:
+  input_guard:
+    fail_closed: true
+    max_text_chars_for_llm: 12000
+  output_guard:
+    max_text_chars: 900
+slack:
+  allowed_channel_names:
+    - #general
+rules:
+  - action: connector.granola.authenticate
+    mode: allow
+    reason: Granola import requires an authenticated personal API key.
+  - action: connector.granola.read_notes
+    mode: allow
+    reason: The workflow needs to read Granola notes, summaries, and transcripts.
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: The workflow posts update and score messages to Slack.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Slack channel resolution may require metadata lookup.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: The workflow posts controlled status and score updates to Slack.

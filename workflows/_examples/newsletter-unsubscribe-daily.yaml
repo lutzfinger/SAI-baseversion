@@ -1,0 +1,34 @@
+workflow_id: example_newsletter-unsubscribe-daily
+version: "1"
+description: Consume already-tagged Gmail newsletters, preserve newsletters listed in config/newsletter-whitelist.yaml, and unsubscribe the rest under strict controls.
+worker: newsletter_unsubscribe
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 25
+  label_ids: []
+  query: 'label:"SAI/Remove" newer_than:30d'
+  assume_newsletter_messages: true
+  include_spam_trash: false
+policy: newsletter_unsubscribe.yaml
+tags:
+  - gmail
+  - newsletters
+  - unsubscribe
+  - controlled-web
+  - slack
+tools:
+  - tool_id: newsletter_allowlist
+    kind: newsletter_allowlist_checker
+    config:
+      # This workflow consumes the standalone newsletter whitelist config.
+      whitelist_path: config/newsletter-whitelist.yaml
+  - tool_id: newsletter_unsubscribe
+    kind: newsletter_unsubscribe_executor
+    config:
+      enable_browser_fallback: true
+      browser_headless: true
+  - tool_id: newsletter_unsubscribe_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: sai-unsubscribe

@@ -1,0 +1,77 @@
+workflow_id: example_meeting-followup-intake-draft-only
+version: "1"
+description: Watch inbox threads where agent@example.com is copied, resolve the target contact, enrich context, choose the current follow-up state, and create a draft only.
+worker: meeting_followup
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 25
+  label_ids:
+    - INBOX
+  query: 'in:inbox (cc:agent@example.com OR to:agent@example.com) -from:agent@example.com'
+  include_spam_trash: false
+policy: meeting_followup_draft_only.yaml
+tags:
+  - gmail
+  - calendar
+  - linkedin
+  - meeting-followup
+  - draft-only
+tools:
+  - tool_id: email_input_guard
+    kind: input_guard
+    provider: ollama
+    model: llama-guard3:1b
+  - tool_id: email_local_llm_classifier
+    kind: local_llm_classifier
+    prompt: email/llm-classify-gptoss.md
+    provider: ollama
+    model: gpt-oss:20b
+  - tool_id: email_cloud_escalation_classifier
+    kind: escalation_classifier
+    prompt: email/llm-classify-cloud.md
+    provider: openai
+    model: gpt-5.2-pro
+    config:
+      always_run: true
+      evaluation_note: temporary_eval_mode_remove_after_local_vs_cloud_calibration
+      confidence_below: 0.82
+      escalate_on_other_intent: true
+  - tool_id: email_output_guard
+    kind: output_guard
+  - tool_id: email_other_to_personal_router
+    kind: other_to_personal_router
+  - tool_id: email_output_evaluator
+    kind: langsmith_evaluator
+  - tool_id: meeting_followup_gmail_history
+    kind: gmail_history_enrichment
+    config:
+      max_history_results: 25
+  - tool_id: meeting_followup_calendar_history
+    kind: calendar_history_enrichment
+    config:
+      calendar_id: primary
+      lookback_days: 365
+      max_results: 250
+      search_all_calendars: true
+  - tool_id: meeting_followup_linkedin_lookup
+    kind: linkedin_enrichment
+  - tool_id: meeting_followup_intake
+    kind: meeting_followup_intake_filter
+  - tool_id: meeting_followup_resolver
+    kind: meeting_followup_contact_resolver
+  - tool_id: meeting_followup_enricher
+    kind: meeting_followup_context_enricher
+  - tool_id: meeting_followup_state
+    kind: meeting_followup_state_classifier
+    prompt: meeting_followup/state.md
+  - tool_id: meeting_followup_planner
+    kind: meeting_followup_draft_planner
+    prompt: meeting_followup/plan.md
+  - tool_id: meeting_followup_draft
+    kind: meeting_followup_draft_writer
+    prompt: meeting_followup/draft.md
+  - tool_id: meeting_followup_gmail_draft_creator
+    kind: gmail_draft_creator
+  - tool_id: meeting_followup_tracker
+    kind: meeting_followup_tracker

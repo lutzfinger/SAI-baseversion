@@ -1,0 +1,32 @@
+[
+  {
+    "message_id": "msg-001",
+    "thread_id": "thread-001",
+    "from_email": "manager@example.com",
+    "to": ["you@example.com"],
+    "cc": [],
+    "subject": "Can you send the updated notes today?",
+    "snippet": "Hi Lutz, can you send the revised notes by EOD today so I can include them in tomorrow's deck?",
+    "received_at": "2026-03-11T15:00:00+00:00"
+  },
+  {
+    "message_id": "msg-002",
+    "thread_id": "thread-002",
+    "from_email": "someone@example.com",
+    "to": ["you@example.com"],
+    "cc": [],
+    "subject": "Weekly recap: AI product launches",
+    "snippet": "Your weekly digest is here. Unsubscribe anytime and catch up on the latest announcements.",
+    "received_at": "2026-03-11T12:30:00+00:00"
+  },
+  {
+    "message_id": "msg-003",
+    "thread_id": "thread-003",
+    "from_email": "calendar-bot@example.com",
+    "to": ["you@example.com"],
+    "cc": [],
+    "subject": "Meeting invite rescheduled",
+    "snippet": "The project sync meeting has been moved to Friday at 2 PM. Please review the updated schedule.",
+    "received_at": "2026-03-11T09:15:00+00:00"
+  }
+]

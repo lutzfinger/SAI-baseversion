@@ -1,0 +1,49 @@
+policy_id: slack_bot
+version: "1"
+description: Slack bot integration for status messages and operator feedback.
+default_mode: deny
+slack:
+  allowed_env_keys:
+    bot_token: SAI_SLACK_BOT_TOKEN
+    app_token: SAI_SLACK_APP_TOKEN
+    signing_secret: SAI_SLACK_SIGNING_SECRET
+  allowed_channel_names:
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+    - #general
+  allowed_user_ids_env: SAI_SLACK_ALLOWED_USER_IDS
+  allowed_user_ids:
+    - U0AQP7SBWGG
+  allow_direct_messages: true
+rules:
+  - action: connector.slack.authenticate
+    mode: allow
+    reason: The bot needs an explicit Slack bot token before it can post or respond.
+  - action: connector.slack.read_channel_metadata
+    mode: allow
+    reason: Channel name resolution may require Slack channel metadata.
+  - action: connector.slack.post_message
+    mode: allow
+    reason: The bot posts workflow status updates and operator questions.
+  - action: connector.slack.read_message_history
+    mode: allow
+    reason: The bot may poll direct-message history as a fallback when Slack event delivery is missing.
+  - action: connector.slack.receive_events
+    mode: allow
+    reason: The bot accepts Slack Events API callbacks for app mentions and DMs.
+  - action: connector.slack.receive_interactions
+    mode: allow
+    reason: The bot accepts Slack button clicks for structured operator feedback.
+  - action: connector.slack.socket_mode_connect
+    mode: allow
+    reason: The bot may open one authenticated Socket Mode session for Slack events.

@@ -1,0 +1,30 @@
+workflow_id: example_cornell-course-ta-supervision
+version: "1"
+description: Watch SAI/Input Cornell TA threads, send narrow TA check-ins, and keep SAI/Supervising in sync until the issue is resolved or escalated.
+worker: cornell_ta_supervision
+connector: gmail_api
+connector_config:
+  user_id: me
+  max_results: 50
+  query: 'label:"SAI/Input" OR label:"SAI/Supervising"'
+  include_spam_trash: false
+policy: cornell_ta_supervision.yaml
+tags:
+  - gmail
+  - cornell
+  - supervision
+  - sai-input
+  - modify-labels
+  - send
+tools:
+  - tool_id: email_input_guard
+    kind: input_guard
+    provider: ollama
+    model: llama-guard3:1b
+  - tool_id: cornell_ta_supervision_classifier
+    kind: cornell_ta_supervision_classifier
+    prompt: meeting/cornell-ta-supervision.md
+    provider: openai
+    model: gpt-5.2-pro
+  - tool_id: cornell_ta_supervision_slack_sender
+    kind: slack_message_sender

@@ -1,0 +1,26 @@
+workflow_id: example_people-of-interest-weekly
+version: "1"
+description: Run a weekly OpenAI web search on the monitored people-of-interest list and post a summary to Slack.
+worker: people_of_interest
+connector: runtime_only
+connector_config: {}
+policy: people_of_interest.yaml
+tags:
+  - people-of-interest
+  - weekly
+  - monitoring
+  - web-search
+tools:
+  - tool_id: people_of_interest_researcher
+    kind: people_of_interest_researcher
+    prompt: people_interest/weekly-search.md
+    provider: openai
+    model: gpt-5.2
+    config:
+      max_output_tokens: 900
+      timeout_seconds: 90
+      search_context_size: medium
+  - tool_id: people_of_interest_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general

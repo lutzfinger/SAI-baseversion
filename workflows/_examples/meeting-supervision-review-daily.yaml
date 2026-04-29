@@ -1,0 +1,17 @@
+workflow_id: example_meeting-supervision-review-daily
+version: "1"
+description: Compare the supervision ledgers with the live SAI/Supervising Gmail label and report mismatches to #general.
+worker: meeting_supervision_review
+connector: runtime_only
+connector_config: {}
+policy: meeting_supervision_review.yaml
+tags:
+  - meetings
+  - gmail
+  - observability
+  - slack
+tools:
+  - tool_id: meeting_supervision_review_slack_sender
+    kind: slack_message_sender
+    config:
+      channel_name: #general
