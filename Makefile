@@ -2,10 +2,11 @@ PYTHON ?= .venv/bin/python
 UVICORN_HOST ?= 127.0.0.1
 UVICORN_PORT ?= 8000
 
-.PHONY: help dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck
+.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck
 
 help:
 	@printf '%s\n' \
+		'make install               Editable install + dev extras (re-run after pyproject.toml changes)' \
 		'make dev                   Start the local API' \
 		'make auth-newsletters      Authenticate Gmail for read-only newsletter classification' \
 		'make auth-newsletter-tags  Authenticate Gmail for newsletter tagging' \
@@ -17,6 +18,9 @@ help:
 		'make test                  Run pytest' \
 		'make lint                  Run Ruff' \
 		'make typecheck             Run mypy'
+
+install:
+	@$(PYTHON) -m pip install -e '.[dev]'
 
 dev:
 	@$(PYTHON) -m uvicorn app.main:app --reload --host $(UVICORN_HOST) --port $(UVICORN_PORT)
