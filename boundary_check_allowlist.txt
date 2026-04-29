@@ -25,3 +25,7 @@ PHASE-2-DONE.md
 tests/runtime/test_boundary_check.py
 # Test file for the boundary linter. Must contain trigger examples for each
 # rule (otherwise it can't test them). Not real personal data.
+
+PHASE-3-PARTIAL-DONE.md
+# Phase 3 partial report. References the private repo path Lutz_Dev/SAI
+# while explaining what landed.

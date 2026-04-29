@@ -1,55 +1,81 @@
+---
+prompt_id: example_team_member_supervision
 version: "1"
-description: Classify Cornell TA course threads for SAI supervision, follow-up timing, and escalation timing.
+description: Classify a multi-party email thread for follow-up timing — used when you've delegated something to a team member and want to track when to nudge or escalate.
+---
 
-You review one email thread that already entered the SAI/Input lane because a Cornell TA and Lutz were both on it.
+# What this prompt does
 
-Your job:
-1. Decide whether this is a Cornell course issue that TAs should normally handle.
-2. Decide the current monitoring state.
-3. Decide when SAI should check in with the TAs.
-4. Decide how long SAI should wait after its own follow-up before escalating to Lutz.
+Reads one email thread where you and a delegate are both involved (e.g.
+you're a manager, they're a team member; or you're a professor, they're
+a TA; or you're a founder, they're a contractor). Returns:
 
-Return strict JSON only.
+- Whether the delegate has responded recently
+- Whether the thread needs your direct intervention
+- When to follow up if no movement happens
 
-Allowed monitoring_status values:
-- "monitor_ta": This is a Cornell course/student operations issue and SAI should keep supervising.
-- "resolved_by_ta": A TA already handled the student issue.
-- "needs_lutz_help": A TA is asking Lutz for help or a decision.
-- "not_course_case": This is not a Cornell course supervision case.
+The intended workflow: SAI tags threads with a "supervision" label,
+this prompt runs daily, and when a thread crosses a follow-up threshold
+SAI sends you a Slack reminder.
 
-Interpretation guidance:
-- Typical Cornell course issues: late homework, missed class, attendance, question about slides, extension requests, logistics, grading-process questions, office-hour scheduling, make-up requests.
-- If the latest visible message is from a TA and clearly addresses the student or closes the loop, use "resolved_by_ta".
-- If the latest visible message is from a TA and asks Lutz for input, approval, decision, or direct help, use "needs_lutz_help".
-- If the thread is a student logistics issue and the TAs are on it but no TA resolution is visible yet, use "monitor_ta".
-- If the request is urgent or time-sensitive, choose a short follow-up delay.
+# How to customize for your use case
 
-Timing guidance:
-- followup_hours:
-  - urgent / tomorrow / same-day attendance or class issue: 2 to 4
-  - normal course logistics: 24
-  - low urgency background issue: 48 to 72
-- escalation_hours_after_followup:
-  - urgent cases: 6 to 12
-  - normal cases: 24
-  - low urgency cases: 48
+1. **Delegate roster** — `config/team_members.yaml` (private) lists who
+   counts as a "delegate" for this workflow. Format:
+   `[name, email, role, supervision_horizon_days]`.
+2. **Follow-up cadence** — defaults to 3 days for non-urgent threads,
+   1 day when the thread mentions deadlines or external customers.
+3. **Escalation channel** — Slack channel for reminders. Defaults to
+   `#general` in the example workflow.
 
-Writing guidance:
-- issue_summary must be short, concrete, and neutral.
-- reason must explain the decision briefly.
-- Use high confidence only when the latest message makes the state obvious.
+This prompt was originally written for academic TA supervision but is
+generic over any "I delegated something, when do I check in?" pattern.
 
-MESSAGE_PAYLOAD_JSON:
-{message_payload_json}
+---
 
-TA_REGISTRY_JSON:
-{ta_registry_json}
+You review one email thread that already entered the supervision lane
+because both the operator and a delegate were on it.
 
-THREAD_TA_EMAILS_JSON:
-{ta_emails_json}
+Return:
 
-THREAD_STUDENT_EMAILS_JSON:
-{student_emails_json}
+```
+{
+  "thread_id": "...",
+  "delegate_responded_within_horizon": true | false,
+  "needs_operator_action": true | false,
+  "next_followup_due": "ISO-8601 datetime or null",
+  "reason": "one sentence, max 25 words"
+}
+```
 
-PRIOR_STATE_JSON:
-{prior_state_json}
+Rules for `needs_operator_action`:
+
+- `true` if the most recent message asks the operator a direct question
+- `true` if the thread is stalled past the supervision horizon and the
+  external party is waiting
+- `true` if the delegate has explicitly escalated ("I need your input")
+- `false` otherwise
+
+Rules for `next_followup_due`:
+
+- If the delegate has responded within the horizon → `null`
+- Otherwise → `<delegate's last reply timestamp> + horizon_days`
+- If no delegate reply at all → `<thread start> + horizon_days`
+
+# CUSTOMIZE: Made-up example delegates
+
+Your private `team_members.yaml` will look like:
+
+```yaml
+team_members:
+  - name: "Richard Hendricks"
+    email: "richard@pied-piper.example"
+    role: "engineer"
+    supervision_horizon_days: 3
+  - name: "Jared Dunn"
+    email: "jared@pied-piper.example"
+    role: "operations"
+    supervision_horizon_days: 2
+```
+
+(Replace with your actual delegates in the private overlay.)
