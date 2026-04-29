@@ -14,6 +14,7 @@ from app.connectors.gmail_auth import GmailOAuthAuthenticator
 from app.connectors.gmail_labels import GmailLabelConnector
 from app.connectors.slack import SlackPostConnector
 from app.control_plane.loaders import PolicyStore, PromptStore, WorkflowStore
+from app.runtime.verify import Verifier  # noqa: TC001 — used in type annotation
 from app.learning.fact_memory import FactMemoryStore, extract_operator_facts, render_fact_context
 from app.observability.audit import AuditLogger
 from app.observability.langsmith import flush_langsmith_tracers
@@ -65,15 +66,49 @@ class ControlPlane:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.settings.ensure_runtime_paths()
-        self.prompt_store = PromptStore(settings.prompts_dir)
-        self.policy_store = PolicyStore(settings.policies_dir)
-        self.workflow_store = WorkflowStore(settings.workflows_dir)
-        self.run_store = RunStore(settings.database_path)
         self.audit_logger = AuditLogger(settings)
+        self.verifier = self._build_verifier()
+        self.prompt_store = PromptStore(settings.prompts_dir, verifier=self.verifier)
+        self.policy_store = PolicyStore(settings.policies_dir, verifier=self.verifier)
+        self.workflow_store = WorkflowStore(
+            settings.workflows_dir, verifier=self.verifier
+        )
+        self.run_store = RunStore(settings.database_path)
         self.approval_service = ApprovalService(self.run_store, self.audit_logger)
         self.fact_memory = FactMemoryStore(settings.fact_memory_database_path)
         self.newsletter_worker = NewsletterIdentifierWorker(settings=settings)
         self.sai_email_worker = SaiEmailInteractionWorker(settings=settings)
+
+    def _build_verifier(self) -> "Verifier | None":
+        from app.runtime.verify import (
+            VerificationFailureRecord,
+            build_verifier_for_runtime,
+        )
+
+        def _audit_callback(record: VerificationFailureRecord) -> None:
+            # Phase 1.5: every verification failure becomes one audit row.
+            self.audit_logger.append_event(
+                run_id="overlay-verify",
+                workflow_id="overlay-verify",
+                actor="system",
+                component="runtime.verify",
+                event_type="overlay_verify_failure",
+                payload={
+                    "relpath": record.relpath,
+                    "error_type": record.error_type,
+                    "expected_sha256": record.expected_sha256,
+                    "actual_sha256": record.actual_sha256,
+                    "mode": record.mode,
+                    "manifest_mode": record.manifest_mode,
+                    "timestamp": record.timestamp.isoformat(),
+                },
+                redact=False,
+            )
+
+        return build_verifier_for_runtime(
+            self.settings.overlay_runtime_root,
+            on_failure=_audit_callback,
+        )
 
     def close(self) -> None:
         flush_langsmith_tracers()

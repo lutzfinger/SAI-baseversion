@@ -95,6 +95,14 @@ class Settings(BaseSettings):
 
     templates_dir: Path = Field(default=REPO_ROOT / "app" / "ui" / "templates")
 
+    # Phase 1 (overlay hash verification): when set, points at the merged
+    # runtime tree produced by `sai-overlay merge`. The hash-verifying loader
+    # uses this to find `.sai-overlay-manifest.json` and verify every workflow
+    # / policy / prompt before parsing. Unset means no overlay merge is in
+    # effect (e.g. running directly out of the repo for the public starter)
+    # and the loader skips verification.
+    overlay_runtime_root: Path | None = Field(default=None)
+
     model_config = SettingsConfigDict(
         env_prefix="SAI_",
         env_file=".env",
