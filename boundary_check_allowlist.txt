@@ -1,0 +1,19 @@
+# Boundary linter exemption list.
+# One path per line, each entry MUST be followed by a comment explaining why
+# the file is permitted to contain otherwise-flagged content.
+
+HANDOFF.md
+# Phase 0 handoff doc references Lutz_Dev paths in concrete `cd ~/Lutz_Dev/...`
+# install instructions for the SAI-baseversion repo on Lutz's Mac. The doc is
+# instructional / setup-specific.
+
+PHASE-0-DONE.md
+# Phase report describing where artifacts landed in Lutz's working tree.
+
+PHASE-1-DONE.md
+# Phase report. References lutzfinger / op:// / keychain:// inside backticks
+# as documentation of the rule patterns themselves.
+
+app/shared/runtime_env.py
+# Framework code that parses keychain:// references. Must mention the scheme
+# name to do its job.
