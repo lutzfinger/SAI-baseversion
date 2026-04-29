@@ -13,6 +13,7 @@ from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+from app.runtime.verify import Verifier
 from app.shared.models import PolicyDocument, PromptDocument, WorkflowDefinition
 from app.shared.tool_registry import validate_workflow_tools
 
@@ -20,13 +21,16 @@ from app.shared.tool_registry import validate_workflow_tools
 class PromptStore:
     """Load prompt files with frontmatter metadata and traceability hashes."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, verifier: Verifier | None = None) -> None:
         self.root = root
+        self.verifier = verifier
 
     def load(self, reference: str | Path) -> PromptDocument:
         """Resolve a prompt path, parse frontmatter, and compute its content hash."""
 
         path = _resolve_path(self.root, reference)
+        if self.verifier is not None:
+            self.verifier.verify(path)
         raw = path.read_text(encoding="utf-8")
         frontmatter, instructions = _split_frontmatter(raw)
         metadata = _yaml_mapping(frontmatter)
@@ -49,12 +53,20 @@ class PromptStore:
 class PromptLockStore:
     """Load the central prompt lock manifest used by workflow tools."""
 
-    def __init__(self, root: Path, filename: str = "prompt-locks.yaml") -> None:
+    def __init__(
+        self,
+        root: Path,
+        filename: str = "prompt-locks.yaml",
+        verifier: Verifier | None = None,
+    ) -> None:
         self.root = root
         self.filename = filename
+        self.verifier = verifier
 
     def load(self) -> dict[str, str]:
         path = self.root / self.filename
+        if self.verifier is not None:
+            self.verifier.verify(path)
         metadata = _yaml_mapping(path.read_text(encoding="utf-8"))
         prompts = metadata.get("prompts", {})
         if not isinstance(prompts, dict):
@@ -72,13 +84,16 @@ class PromptLockStore:
 class PolicyStore:
     """Load policy files that govern side effects and approval requirements."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, verifier: Verifier | None = None) -> None:
         self.root = root
+        self.verifier = verifier
 
     def load(self, reference: str | Path) -> PolicyDocument:
         """Parse a YAML policy file into a typed policy document."""
 
         path = _resolve_path(self.root, reference)
+        if self.verifier is not None:
+            self.verifier.verify(path)
         metadata = _yaml_mapping(path.read_text(encoding="utf-8"))
         return PolicyDocument.model_validate(
             {
@@ -100,13 +115,16 @@ class PolicyStore:
 class WorkflowStore:
     """Load workflow definitions that bind workers, connectors, prompts, and policies."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, verifier: Verifier | None = None) -> None:
         self.root = root
+        self.verifier = verifier
 
     def load(self, reference: str | Path) -> WorkflowDefinition:
         """Return one workflow definition from the versioned workflow store."""
 
         path = _resolve_path(self.root, reference)
+        if self.verifier is not None:
+            self.verifier.verify(path)
         metadata = _yaml_mapping(path.read_text(encoding="utf-8"))
         workflow = WorkflowDefinition.model_validate(
             {

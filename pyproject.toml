@@ -38,6 +38,7 @@ dev = [
 [project.scripts]
 sai-api = "app.main:main"
 sai-overlay = "app.runtime.overlay:cli"
+sai-verify = "app.runtime.verify_cli:cli"
 
 [tool.setuptools]
 packages = [
