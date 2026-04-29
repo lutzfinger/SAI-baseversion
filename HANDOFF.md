@@ -37,12 +37,19 @@ Phase 1 (the hash-verifying loader) and Phase 3 (the public/private split).
 
 ```sh
 cd ~/Lutz_Dev/SAI-baseversion
-pip install -e '.[dev]'         # if not already installed
+make install                    # editable + dev extras (also re-run after any pyproject.toml change)
 pytest tests/runtime/test_overlay.py -v
 ```
 
 Expected: 25 tests pass (22 contract tests numbered in comments + 3
 verify smoke tests).
+
+> **Why `make install` matters even on an existing venv.** Editable installs
+> cache `[project.scripts]` entries at install time. When `pyproject.toml`
+> changes (e.g., the `sai-overlay` console script was added), the change
+> doesn't take effect until you re-run `pip install -e .`. `make install`
+> is idempotent and cheap — run it whenever `pyproject.toml` changes or
+> when a shipped console script isn't on PATH.
 
 ## Manual demo
 
