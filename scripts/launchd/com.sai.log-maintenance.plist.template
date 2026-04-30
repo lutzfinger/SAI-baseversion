@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SAI nightly log maintenance launchd agent template.
+
+  This file is a TEMPLATE. To install:
+
+    # Render template with your paths
+    REPO_ROOT="$HOME/sai-baseversion"             # ← set to your SAI clone
+    LOG_DIR="$HOME/Library/Logs/SAI"              # ← keep default unless overridden
+
+    sed -e "s|__SAI_REPO_ROOT__|$REPO_ROOT|g" \
+        -e "s|__SAI_LOG_DIR__|$LOG_DIR|g" \
+        scripts/launchd/com.sai.log-maintenance.plist.template \
+        > ~/Library/LaunchAgents/com.sai.log-maintenance.plist
+
+    # Load it (runs nightly at 3:30 AM)
+    launchctl load ~/Library/LaunchAgents/com.sai.log-maintenance.plist
+
+    # To stop:
+    launchctl unload ~/Library/LaunchAgents/com.sai.log-maintenance.plist
+
+  The agent runs `scripts/run_log_maintenance.sh` which:
+    1. Rotates audit.jsonl into monthly archives (audit-YYYY-MM.jsonl.gz)
+    2. Prunes LangGraph checkpoints older than the configured TTL
+    3. Truncates ollama-auto.log when it exceeds 50 MB
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.sai.log-maintenance</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__SAI_REPO_ROOT__/scripts/run_log_maintenance.sh</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>__SAI_LOG_DIR__/scheduled/launchd_log_maintenance.err.log</string>
+	<key>StandardOutPath</key>
+	<string>__SAI_LOG_DIR__/scheduled/launchd_log_maintenance.out.log</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>3</integer>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>__SAI_REPO_ROOT__</string>
+</dict>
+</plist>

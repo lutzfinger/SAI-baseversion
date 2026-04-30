@@ -12,6 +12,25 @@ from app.shared.runtime_env import load_runtime_env_best_effort
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Runtime state lives outside the repo so the working tree stays code/config only.
+# Override via SAI_STATE_DIR / SAI_LOGS_DIR / SAI_TOKENS_DIR env vars (pydantic
+# Settings reads SAI_<FIELD> automatically via the env_prefix below).
+#
+#   DEFAULT_STATE_DIR  — mutable runtime state (sqlite DBs, checkpoints,
+#                        background-service heartbeats). macOS standard:
+#                        ~/Library/Application Support/SAI/state
+#   DEFAULT_LOG_DIR    — append-only logs (audit.jsonl, scheduled-job stdout/err,
+#                        ollama-auto.log). macOS standard: ~/Library/Logs/SAI
+#   DEFAULT_TOKENS_DIR — OAuth tokens and secrets staged for connectors.
+#                        ~/.config/sai/tokens (kept separate from state).
+#   DEFAULT_EVAL_DIR   — eval datasets, learning corpus, training artifacts that
+#                        SHOULD be checked in (or kept under version control in
+#                        the private overlay). REPO_ROOT/eval.
+DEFAULT_STATE_DIR = Path("~/Library/Application Support/SAI/state").expanduser()
+DEFAULT_LOG_DIR = Path("~/Library/Logs/SAI").expanduser()
+DEFAULT_TOKENS_DIR = Path("~/.config/sai/tokens").expanduser()
+DEFAULT_EVAL_DIR = REPO_ROOT / "eval"
+
 
 class Settings(BaseSettings):
     """Small, explicit runtime settings for the starter control plane."""
@@ -75,22 +94,24 @@ class Settings(BaseSettings):
     workflows_dir: Path = Field(default=REPO_ROOT / "workflows")
     registry_dir: Path = Field(default=REPO_ROOT / "registry")
     config_dir: Path = Field(default=REPO_ROOT / "config")
-    logs_dir: Path = Field(default=REPO_ROOT / "logs")
-    artifacts_dir: Path = Field(default=REPO_ROOT / "logs" / "artifacts")
-    learning_dir: Path = Field(default=REPO_ROOT / "logs" / "learning")
-    audit_log_path: Path = Field(default=REPO_ROOT / "logs" / "audit.jsonl")
-    database_path: Path = Field(default=REPO_ROOT / "logs" / "control_plane.db")
+    state_dir: Path = Field(default=DEFAULT_STATE_DIR)
+    logs_dir: Path = Field(default=DEFAULT_LOG_DIR)
+    tokens_dir: Path = Field(default=DEFAULT_TOKENS_DIR)
+    artifacts_dir: Path = Field(default=DEFAULT_STATE_DIR / "artifacts")
+    learning_dir: Path = Field(default=DEFAULT_EVAL_DIR)
+    audit_log_path: Path = Field(default=DEFAULT_LOG_DIR / "audit.jsonl")
+    database_path: Path = Field(default=DEFAULT_STATE_DIR / "control_plane.db")
     fact_memory_database_path: Path = Field(
-        default=REPO_ROOT / "logs" / "learning" / "fact_memory.sqlite"
+        default=DEFAULT_STATE_DIR / "fact_memory.sqlite"
     )
     newsletter_eval_dataset_path: Path = Field(
-        default=REPO_ROOT / "logs" / "learning" / "newsletter_eval_dataset.jsonl"
+        default=DEFAULT_EVAL_DIR / "newsletter_eval_dataset.jsonl"
     )
     sai_email_activity_log_path: Path = Field(
-        default=REPO_ROOT / "logs" / "learning" / "sai_email_activities.jsonl"
+        default=DEFAULT_EVAL_DIR / "sai_email_activities.jsonl"
     )
     sai_email_golden_dataset_path: Path = Field(
-        default=REPO_ROOT / "logs" / "learning" / "sai_email_golden_dataset.jsonl"
+        default=DEFAULT_EVAL_DIR / "sai_email_golden_dataset.jsonl"
     )
 
     templates_dir: Path = Field(default=REPO_ROOT / "app" / "ui" / "templates")
@@ -113,7 +134,9 @@ class Settings(BaseSettings):
     def ensure_runtime_paths(self) -> None:
         """Create the local directories the starter control plane expects."""
 
+        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+        self.tokens_dir.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.learning_dir.mkdir(parents=True, exist_ok=True)
         self.prompts_dir.mkdir(parents=True, exist_ok=True)

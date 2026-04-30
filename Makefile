@@ -2,7 +2,7 @@ PYTHON ?= .venv/bin/python
 UVICORN_HOST ?= 127.0.0.1
 UVICORN_PORT ?= 8000
 
-.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck
+.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck log-maintenance log-maintenance-dry
 
 help:
 	@printf '%s\n' \
@@ -15,6 +15,8 @@ help:
 		'make run-newsletter-tags   Run the newsletter tagging workflow' \
 		'make run-sai-email         Run the starter email interaction workflow' \
 		'make privacy-scan          Search for likely private strings and local path leaks' \
+		'make log-maintenance       Run nightly log maintenance once (rotate audit, prune checkpoints, rotate ollama)' \
+		'make log-maintenance-dry   Dry-run all three log-maintenance steps without making changes' \
 		'make test                  Run pytest' \
 		'make lint                  Run Ruff' \
 		'make typecheck             Run mypy'
@@ -46,6 +48,14 @@ run-sai-email:
 privacy-scan:
 	@find . -type f \( -name '.env' -o -name '*.db' -o -name '*.sqlite' -o -name '*.pyc' \) -print
 	@user_path='/Use''rs/'; home_path='/ho''me/'; rg --hidden -n -S "$$user_path|$$home_path" . || true
+
+log-maintenance:
+	@/bin/sh scripts/run_log_maintenance.sh && echo "log-maintenance complete; tail $(HOME)/Library/Logs/SAI/log-maintenance.log for details"
+
+log-maintenance-dry:
+	@$(PYTHON) scripts/rotate_audit_log.py --dry-run
+	@$(PYTHON) scripts/prune_langgraph_checkpoints.py --dry-run
+	@/bin/sh scripts/rotate_ollama_log.sh
 
 test:
 	@$(PYTHON) -m pytest
