@@ -21,6 +21,14 @@ The cascade runner ships in step 4 (task.py + runner.py).
 
 from __future__ import annotations
 
+from app.runtime.ai_stack.runner import CascadeAbstainedError, TieredTaskRunner
+from app.runtime.ai_stack.task import (
+    EscalationPolicy,
+    GraduationExperimentConfig,
+    GraduationThresholds,
+    Task,
+    TaskConfig,
+)
 from app.runtime.ai_stack.tier import (
     TIER_KIND_ORDER,
     Tier,
@@ -37,16 +45,23 @@ from app.runtime.ai_stack.tiers.rules import RuleFn, RulesTier
 __all__ = [
     "TIER_KIND_ORDER",
     "AskPoster",
+    "CascadeAbstainedError",
     "ClassifierTier",
     "ClassifyFn",
     "CloudLLMTier",
+    "EscalationPolicy",
+    "GraduationExperimentConfig",
+    "GraduationThresholds",
     "HumanTier",
     "LLMTierBase",
     "LocalLLMTier",
     "PromptRenderer",
     "RuleFn",
     "RulesTier",
+    "Task",
+    "TaskConfig",
     "Tier",
     "TierKind",
+    "TieredTaskRunner",
     "is_resolved",
 ]
