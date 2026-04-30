@@ -41,9 +41,24 @@ SKIP_DIR_NAMES = frozenset(
         ".pytest_cache",
         ".ruff_cache",
         "node_modules",
+        # Runtime state lives at ~/Library/{Logs,Application Support}/SAI per
+        # app/shared/config.py; any `logs/` folder in either repo tree is
+        # legacy and must NOT be carried into the merged runtime — these can
+        # be multi-GB (e.g. langgraph_checkpoints.sqlite backup) and dirty
+        # the runtime tree's hash manifest.
+        "logs",
+        # Quarantined corpus-cleanup snapshots: lots of small files, not code.
+        "quarantine",
     }
 )
-SKIP_FILE_NAMES = frozenset({".DS_Store", MANIFEST_FILENAME})
+SKIP_FILE_NAMES = frozenset(
+    {
+        ".DS_Store",
+        MANIFEST_FILENAME,
+        # Per-repo classifier artifact, not framework or data.
+        "split-classification.json",
+    }
+)
 SKIP_FILE_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
 
 
