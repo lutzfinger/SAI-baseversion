@@ -36,7 +36,7 @@ Plus: `scripts/analyze_video.py` (CLI front-end for video_analysis) — restore 
 
 For each task above, one focused session:
 
-1. Read the private-repo originals at `~/Lutz_Dev/SAI/app/...`
+1. Read the private-repo originals at `$SAI_PRIVATE/app/...`
 2. Identify framework code vs. data — Lutz's prompts, channel names,
    and operator-specific content stay in private; the LLM call shape,
    schema, retry logic, etc. come to public.
@@ -70,8 +70,8 @@ shape). Forcing all 46 files through a single sweep produces a lot of
 shallow per-file diffs that don't fit the task-migration cadence.
 
 If you want a one-shot reconciliation later, the classifier output lives
-at `~/Lutz_Dev/SAI/split-classification.json` and the apply-script
-machinery is at `~/Lutz_Dev/SAI/scripts/apply_split.py`.
+at `$SAI_PRIVATE/split-classification.json` and the apply-script
+machinery is at `$SAI_PRIVATE/scripts/apply_split.py`.
 
 ## Phase 3.5 (5): 12 collect-ignored tests
 
