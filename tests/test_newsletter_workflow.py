@@ -62,7 +62,7 @@ def test_newsletter_tagging_workflow_writes_eval_and_artifact(
     assert len(eval_rows) == 1
     eval_row = json.loads(eval_rows[0])
     assert eval_row["message_id"] == "msg-1"
-    assert eval_row["predicted_level1"] == "newsletter"
+    assert eval_row["predicted_level1"] == "newsletters"
 
     workflow_items = control_plane.run_store.list_workflow_items(
         workflow_id="newsletter-identification-gmail-tagging"

@@ -10,18 +10,61 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.shared.models import PromptDocument
 from app.tools.models import ToolExecutionRecord
 
-PrimaryCategory = Literal["newsletter", "general", "other"]
-SecondaryIntent = Literal["informational", "action_required", "others"]
+# Two-layer email taxonomy used by the starter classification prompts and the
+# Gmail-tagging workflow. Customize these values in your private overlay to
+# match how you actually sort email — the prompts and policies must agree.
+#
+#   Level 1 — relationship/context bucket. The prompt template marks the L1
+#             list as `# CUSTOMIZE`; this Literal must stay aligned with it.
+#   Level 2 — intent. Universal vocabulary, rarely changed.
+#
+# `other` and `others` are unresolved fallbacks: they keep the email in inbox
+# and produce no L1/L2 label.
+Level1Classification = Literal[
+    "customers",
+    "partners",
+    "job_hunt",
+    "personal",
+    "friends",
+    "admin_finance",
+    "newsletters",
+    "updates",
+    "other",
+]
+Level2Intent = Literal[
+    "informational",
+    "action_required",
+    "others",
+]
 
+LEVEL1_DISPLAY_NAMES: dict[str, str] = {
+    "customers": "Customers",
+    "partners": "Partners",
+    "job_hunt": "Job Hunt",
+    "personal": "Personal",
+    "friends": "Friends",
+    "admin_finance": "Finance",
+    "newsletters": "Newsletters",
+    "updates": "Updates",
+}
+
+LEVEL2_DISPLAY_NAMES: dict[str, str] = {
+    "informational": "Informational",
+    "action_required": "Action Required",
+}
+
+# Gmail label names produced by the L1/L2 taxonomy.
 PRIMARY_LABELS: dict[str, str] = {
-    "newsletter": "Starter/Category/Newsletter",
-    "general": "Starter/Category/General",
+    key: f"L1/{display}" for key, display in LEVEL1_DISPLAY_NAMES.items()
 }
 INTENT_LABELS: dict[str, str] = {
-    "informational": "Starter/Intent/Informational",
-    "action_required": "Starter/Intent/Action Required",
+    key: f"L2/{display}" for key, display in LEVEL2_DISPLAY_NAMES.items()
 }
 STARTER_INPUT_LABEL = "Starter/Input"
+
+# Back-compat aliases — prefer Level1Classification / Level2Intent in new code.
+PrimaryCategory = Level1Classification
+SecondaryIntent = Level2Intent
 
 
 class EmailMessage(BaseModel):
@@ -82,8 +125,8 @@ class EmailClassification(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     message_id: str
-    level1_classification: PrimaryCategory
-    level2_intent: SecondaryIntent
+    level1_classification: Level1Classification
+    level2_intent: Level2Intent
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str
 
@@ -184,8 +227,37 @@ def all_taxonomy_gmail_label_names() -> list[str]:
     return [*PRIMARY_LABELS.values(), *INTENT_LABELS.values()]
 
 
+def gmail_level1_label_name(level1_classification: Level1Classification) -> str | None:
+    """Return the Gmail label for a resolved L1 classification, or None for fallbacks."""
+
+    if level1_classification in {"newsletters", "other"}:
+        return None
+    return PRIMARY_LABELS.get(level1_classification)
+
+
 def starter_input_label_names() -> list[str]:
     return [STARTER_INPUT_LABEL]
+
+
+class EmailDatasetExample(EmailMessage):
+    """Dataset record for fixtures, evals, and learning corpora.
+
+    Extends the live `EmailMessage` schema with an optional stable label so
+    historical datasets can carry the same core email fields as the runtime
+    connector while still tracking where each example came from.
+    """
+
+    body: str | None = None
+    source_label: str | None = None
+
+
+class LabeledEmailDatasetExample(EmailDatasetExample):
+    """Dataset row with expected L1/L2 labels for offline evaluation."""
+
+    expected_level1_classification: Level1Classification
+    expected_level2_intent: Level2Intent
+    raw_level1_label: str | None = None
+    raw_level2_label: str | None = None
 
 
 def build_artifact(

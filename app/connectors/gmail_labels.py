@@ -165,3 +165,9 @@ class GmailLabelConnector:
             label_name_to_id[label_name] = str(response.get("id", ""))
             created.append(label_name)
         return label_name_to_id, created
+
+
+def is_taxonomy_classification_label(name: str) -> bool:
+    """Return True if a Gmail label name is a starter L1/L2 taxonomy label."""
+
+    return name.startswith("L1/") or name.startswith("L2/")
