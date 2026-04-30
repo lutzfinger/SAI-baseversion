@@ -53,7 +53,7 @@ class KeywordEmailClassifierTool:
         if sender in newsletter_sender_emails:
             classification = EmailClassification(
                 message_id=message.message_id,
-                level1_classification="newsletter",
+                level1_classification="newsletters",
                 level2_intent="informational",
                 confidence=0.97,
                 reason="Exact sender email matched the newsletter rule set.",
@@ -65,7 +65,7 @@ class KeywordEmailClassifierTool:
         ):
             classification = EmailClassification(
                 message_id=message.message_id,
-                level1_classification="newsletter",
+                level1_classification="newsletters",
                 level2_intent="informational",
                 confidence=0.9,
                 reason="Sender domain matched the newsletter rule set.",
@@ -75,7 +75,7 @@ class KeywordEmailClassifierTool:
         elif message.list_unsubscribe or message.unsubscribe_links:
             classification = EmailClassification(
                 message_id=message.message_id,
-                level1_classification="newsletter",
+                level1_classification="newsletters",
                 level2_intent="informational",
                 confidence=0.88,
                 reason="List-unsubscribe headers or links matched a newsletter rule.",
@@ -85,7 +85,7 @@ class KeywordEmailClassifierTool:
         elif any(keyword in combined_text for keyword in newsletter_subject_keywords):
             classification = EmailClassification(
                 message_id=message.message_id,
-                level1_classification="newsletter",
+                level1_classification="newsletters",
                 level2_intent="informational",
                 confidence=0.82,
                 reason="A configured newsletter keyword matched the subject/body excerpt.",

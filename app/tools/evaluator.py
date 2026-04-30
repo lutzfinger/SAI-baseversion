@@ -24,9 +24,9 @@ class ClassificationConsistencyEvaluatorTool:
         decision_source = "cloud" if cloud_candidate else "local" if local_candidate else "keyword"
 
         if (
-            keyword_candidate.level1_classification == "newsletter"
+            keyword_candidate.level1_classification == "newsletters"
             and keyword_candidate.confidence >= 0.88
-            and final_candidate.level1_classification != "newsletter"
+            and final_candidate.level1_classification != "newsletters"
             and final_candidate.confidence < 0.75
         ):
             final_candidate = keyword_candidate.model_copy(
@@ -40,7 +40,7 @@ class ClassificationConsistencyEvaluatorTool:
             decision_source = "keyword_override"
 
         if (
-            final_candidate.level1_classification == "general"
+            final_candidate.level1_classification == "other"
             and _looks_like_actionable_message(message)
             and final_candidate.level2_intent == "informational"
         ):

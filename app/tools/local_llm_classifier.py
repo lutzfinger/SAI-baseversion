@@ -34,9 +34,9 @@ class MockJSONClient:
         del model, response_schema, max_output_tokens
         payload = {
             "message_id": _extract_message_id(prompt),
-            "level1_classification": "newsletter"
+            "level1_classification": "newsletters"
             if "unsubscribe" in prompt.lower() or "newsletter" in prompt.lower()
-            else "general",
+            else "other",
             "level2_intent": "informational",
             "confidence": 0.66,
             "reason": "Mock classifier inferred the category from the prompt content.",

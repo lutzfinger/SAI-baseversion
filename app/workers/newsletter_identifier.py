@@ -146,7 +146,8 @@ class NewsletterIdentifierWorker:
             reviewed_message_count=len(messages),
             classified_message_count=len(items),
             newsletter_message_count=sum(
-                1 for item in items if item.classification.level1_classification == "newsletter"
+                1 for item in items
+                if item.classification.level1_classification == "newsletters"
             ),
             tagged_thread_count=sum(1 for item in items if item.tag_result is not None),
             items=items,
