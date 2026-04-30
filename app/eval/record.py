@@ -17,14 +17,14 @@ real-world action, an explicit Slack-ask answer, or a co-work approval. The
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class RealityStatus(str, Enum):
+class RealityStatus(StrEnum):
     """Where this record sits in the reality-reconciliation lifecycle."""
 
     PENDING = "pending"          # decided; awaiting reality observation
@@ -34,7 +34,7 @@ class RealityStatus(str, Enum):
     SKIPPED = "skipped"          # ambiguous + ask budget hit; excluded from training
 
 
-class RealitySource(str, Enum):
+class RealitySource(StrEnum):
     """How we learned what reality actually was."""
 
     HUMAN_LABEL = "human_label"                    # explicit user label (Gmail label, etc.)
