@@ -23,6 +23,7 @@ from app.eval.preference import (
     PreferenceStrength,
     PreferenceVersion,
 )
+from app.eval.preference_refiner import PreferenceRefiner, RefinementProposal
 from app.eval.reconciler import (
     RealityReconciler,
     RealityReconciliationRunner,
@@ -50,10 +51,12 @@ __all__ = [
     "ObservedReality",
     "Prediction",
     "Preference",
+    "PreferenceRefiner",
     "PreferenceSource",
     "PreferenceStore",
     "PreferenceStrength",
     "PreferenceVersion",
+    "RefinementProposal",
     "RealityReconciler",
     "RealityReconciliationRunner",
     "RealitySource",
