@@ -12,6 +12,18 @@ def test_settings_accept_standard_langsmith_env_names(
     tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    # AliasChoices prefers the SAI_-prefixed names. The user's runtime.env
+    # (loaded by load_runtime_env_best_effort) may have set SAI_LANGSMITH_*,
+    # which would shadow the unprefixed env vars this test is exercising.
+    # Unset the SAI_-prefixed ones so the unprefixed names actually take effect.
+    for sai_var in (
+        "SAI_LANGSMITH_TRACING",
+        "SAI_LANGSMITH_PROJECT",
+        "SAI_LANGSMITH_API_KEY",
+        "SAI_LANGSMITH_ENDPOINT",
+        "SAI_LANGSMITH_WORKSPACE_ID",
+    ):
+        monkeypatch.delenv(sai_var, raising=False)
     monkeypatch.setenv("LANGSMITH_TRACING", "true")
     monkeypatch.setenv("LANGSMITH_PROJECT", "starter-traces")
     monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")

@@ -33,15 +33,22 @@ collect_ignore_glob = [
 
 @pytest.fixture
 def starter_settings(tmp_path: Path) -> Settings:
+    # Pin every path field that defaults to ~/Library/... or REPO_ROOT/eval to a
+    # tmp_path subdir, so tests never read or write the real user's runtime
+    # state, logs, tokens, or eval datasets.
+    state_dir = tmp_path / "state"
     logs_dir = tmp_path / "logs"
-    learning_dir = logs_dir / "learning"
+    tokens_dir = tmp_path / "tokens"
+    learning_dir = tmp_path / "eval"
     return Settings(
+        state_dir=state_dir,
         logs_dir=logs_dir,
-        artifacts_dir=logs_dir / "artifacts",
+        tokens_dir=tokens_dir,
+        artifacts_dir=state_dir / "artifacts",
         learning_dir=learning_dir,
         audit_log_path=logs_dir / "audit.jsonl",
-        database_path=logs_dir / "control_plane.db",
-        fact_memory_database_path=learning_dir / "fact_memory.sqlite",
+        database_path=state_dir / "control_plane.db",
+        fact_memory_database_path=state_dir / "fact_memory.sqlite",
         newsletter_eval_dataset_path=learning_dir / "newsletter_eval_dataset.jsonl",
         sai_email_activity_log_path=learning_dir / "sai_email_activities.jsonl",
         sai_email_golden_dataset_path=learning_dir / "sai_email_golden_dataset.jsonl",

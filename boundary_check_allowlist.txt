@@ -29,3 +29,9 @@ tests/runtime/test_boundary_check.py
 PHASE-3-PARTIAL-DONE.md
 # Phase 3 partial report. References the private repo path Lutz_Dev/SAI
 # while explaining what landed.
+
+CUSTOMIZE-ME.md
+# Customization punch list documents the op:// (1Password CLI) and
+# keychain:// (macOS Keychain) reference syntax so users know how to wire
+# their own secrets without committing them. Must show the schemes to
+# explain them.
