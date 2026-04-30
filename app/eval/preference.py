@@ -21,14 +21,14 @@ PreferenceRefiner LLM (separate component) lands its proposals as PROPOSED with
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PreferenceStrength(str, Enum):
+class PreferenceStrength(StrEnum):
     """How strongly the runtime should treat this preference."""
 
     HARD = "hard"          # enforced as a constraint; violation requires explicit override
@@ -36,7 +36,7 @@ class PreferenceStrength(str, Enum):
     PROPOSED = "proposed"  # not yet approved; runtime ignores
 
 
-class PreferenceSource(str, Enum):
+class PreferenceSource(StrEnum):
     """Where the preference (or this version of it) came from."""
 
     COWORK = "cowork"        # extracted from a real-time human+SAI session
