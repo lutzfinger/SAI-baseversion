@@ -86,7 +86,7 @@ def test_polling_marks_ask_answered_and_propagates_to_records(
     client = _StubWebClient(
         replies=[
             {"user": "BOT", "text": "[email_classification] needs input"},
-            {"user": "U_LUTZ", "text": "friends", "ts": "1714492850.000100"},
+            {"user": "U_LUTZ", "text": "friends", "ts": "1111111112.000100"},
         ]
     )
     reconciler = AskReplyReconciler(

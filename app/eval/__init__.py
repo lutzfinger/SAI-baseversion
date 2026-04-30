@@ -16,6 +16,7 @@ Public modules:
 from __future__ import annotations
 
 from app.eval.ask import Ask, AskKind, AskStatus, AskStore
+from app.eval.orchestrator import AskOrchestrator, BucketingFn
 from app.eval.preference import (
     Preference,
     PreferenceSource,
@@ -40,8 +41,10 @@ from app.eval.storage import EvalRecordStore, PreferenceStore
 __all__ = [
     "Ask",
     "AskKind",
+    "AskOrchestrator",
     "AskStatus",
     "AskStore",
+    "BucketingFn",
     "EvalRecord",
     "EvalRecordStore",
     "ObservedReality",
