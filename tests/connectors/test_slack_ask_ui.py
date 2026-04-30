@@ -14,7 +14,7 @@ from app.eval.ask import AskKind, AskStatus, AskStore
 class _StubWebClient:
     """Drop-in mock for slack_sdk.web.WebClient.chat_postMessage."""
 
-    def __init__(self, *, ts: str = "1714492800.000100") -> None:
+    def __init__(self, *, ts: str = "1111111111.000100") -> None:
         self._ts = ts
         self.calls: list[dict[str, Any]] = []
 
@@ -29,7 +29,7 @@ def store(tmp_path: Path) -> AskStore:
 
 
 def test_post_ask_returns_id_and_persists_record(store: AskStore) -> None:
-    client = _StubWebClient(ts="1714492800.000100")
+    client = _StubWebClient(ts="1111111111.000100")
     ui = SlackAskUI(client=client, channel="#example", ask_store=store)
 
     ask_id = ui.post_ask(
@@ -46,7 +46,7 @@ def test_post_ask_returns_id_and_persists_record(store: AskStore) -> None:
     assert persisted.status == AskStatus.OPEN
     assert persisted.kind == AskKind.CLASSIFICATION
     assert persisted.posted_to_channel == "#example"
-    assert persisted.posted_to_thread_ts == "1714492800.000100"
+    assert persisted.posted_to_thread_ts == "1111111111.000100"
 
 
 def test_post_ask_calls_slack_with_blocks(store: AskStore) -> None:

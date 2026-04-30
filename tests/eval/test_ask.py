@@ -27,7 +27,7 @@ def _make_ask(
         "record_ids": ["rec-1"],
         "question_text": "Classify?",
         "posted_to_channel": "#example",
-        "posted_to_thread_ts": "1700000000.000100",
+        "posted_to_thread_ts": "1111111111.000100",
         "posted_at": _posted_at(),
         "expires_at": _posted_at() + timedelta(days=3),
     }

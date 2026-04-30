@@ -1,9 +1,9 @@
 """SlackAskUI — concrete AskPoster for the eval-channel Slack flow.
 
 Implements the `AskPoster` Protocol from `app.runtime.ai_stack.tiers.human` and
-posts a block-kit message to a single eval channel (default convention:
-`#sai-eval`; the literal channel name lives in private overlay config and is
-injected at construction time so the public starter ships only the protocol).
+posts a block-kit message to a single eval channel. The channel name lives in
+private overlay config and is injected at construction time, so the public
+starter ships only the protocol and the convention.
 
 Flow:
   1. HumanTier (or AskOrchestrator) calls `post_ask(...)`.

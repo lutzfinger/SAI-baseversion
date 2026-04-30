@@ -22,6 +22,12 @@ from app.eval.preference import (
     PreferenceStrength,
     PreferenceVersion,
 )
+from app.eval.reconciler import (
+    RealityReconciler,
+    RealityReconciliationRunner,
+    ReconciliationOutcome,
+    ReconciliationResult,
+)
 from app.eval.record import (
     EvalRecord,
     ObservedReality,
@@ -45,6 +51,10 @@ __all__ = [
     "PreferenceStore",
     "PreferenceStrength",
     "PreferenceVersion",
+    "RealityReconciler",
+    "RealityReconciliationRunner",
     "RealitySource",
     "RealityStatus",
+    "ReconciliationOutcome",
+    "ReconciliationResult",
 ]
