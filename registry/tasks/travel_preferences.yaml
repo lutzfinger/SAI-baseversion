@@ -1,0 +1,46 @@
+# Worked example: travel preference task config.
+#
+# This task is the canonical "Loop B" example — it tracks user preferences
+# (e.g. exit row, business class budget, preferred airlines) and refines
+# them when observed reality diverges. The cascade is light:
+#
+#   rules    — apply existing approved preferences as constraints/scoring
+#   cloud    — for novel decisions (no preference covers this case)
+#   human    — final fallback for anything ambiguous
+#
+# When the runtime detects a violation (the user's actual booking didn't
+# match an active SOFT preference), the PreferenceRefiner is invoked
+# offline. It produces a PROPOSED PreferenceVersion which is posted to
+# Slack as an Ask. On approval, the new version becomes active.
+#
+# Loaded by app.runtime.ai_stack.task.TaskConfig.from_yaml.
+task_id: travel_preferences
+description: >
+  Track and refine user travel preferences (seat class, exit row,
+  airlines, hotels, etc). Decisions cascade through rules → cloud LLM
+  → human escalation. Refinement happens offline via PreferenceRefiner
+  with explicit human approval before any preference update is applied.
+
+input_schema_class: app.workers.travel_models.BookingCandidate
+output_schema_class: app.workers.travel_models.BookingDecision
+
+active_tier_id: cloud_llm
+escalation_policy: ask_human
+reality_observation_window_days: 14    # bookings settle slower than email tags
+
+graduation_thresholds:
+  rules:
+    precision: 0.92
+    recall: 0.70
+  cloud_llm:
+    precision: 0.85
+    recall: 0.85
+
+metadata:
+  notes: >
+    The schema modules (BookingCandidate, BookingDecision) are NOT shipped
+    in public — your private overlay defines them. This YAML is the shape
+    of a valid TaskConfig; replace dotted paths with what your overlay
+    actually provides.
+  loop: B
+  refinement_source: cowork_or_observed_violation
