@@ -6,15 +6,12 @@ import pytest
 
 from app.shared.config import Settings
 
-# Phase 3 follow-up: these tests were copied from private SAI but depend on
-# framework-divergent files (email_models, local_llm_classifier) or a richer
-# `test_settings` fixture that public's conftest doesn't yet provide.
-# Re-enable each as the framework/private split for that area lands.
+# Tests left from the Phase 3 split that need either a richer test_settings
+# fixture or env-isolation work before they can run. Each comes back in its
+# corresponding task migration (see MIGRATION-BACKLOG.md). Tests whose deps
+# went away with the dropped modules have been removed entirely; what's left
+# below is the residue waiting on framework wiring in their own tasks.
 collect_ignore_glob = [
-    # Need framework-divergent reconciliation of email_models / local_llm_classifier
-    "test_langsmith.py",
-    "test_local_cloud_learning.py",
-    "test_slack_joke_workflow.py",
     # Need richer test_settings fixture (private's conftest pattern, sanitized)
     "test_approvals.py",
     "test_background_services.py",
