@@ -1,0 +1,58 @@
+# LLM cost table — USD per 1 million tokens.
+#
+# Used by Provider implementations to compute `cost_usd` on every LLM call.
+# Local providers (Ollama, llama.cpp) cost 0 by default; you can override with
+# a self-hosted GPU amortization rate in your private overlay if you want
+# accurate ROI accounting.
+#
+# Pricing snapshots get stale; update the version date when you refresh.
+# Default fallback "*" entry per provider applies to unknown models.
+
+version: "2026-04-30"
+
+providers:
+  openai:
+    "gpt-4o":
+      input: 2.50
+      cached_input: 1.25
+      output: 10.00
+    "gpt-4o-mini":
+      input: 0.15
+      cached_input: 0.075
+      output: 0.60
+    "o1":
+      input: 15.00
+      output: 60.00
+    "o1-mini":
+      input: 3.00
+      output: 12.00
+    "*":
+      input: 5.00       # conservative unknown-model fallback
+      output: 20.00
+
+  anthropic:
+    "claude-sonnet-4-5-20250929":
+      input: 3.00
+      output: 15.00
+    "claude-opus-4-5-20251101":
+      input: 15.00
+      output: 75.00
+    "*":
+      input: 3.00
+      output: 15.00
+
+  google:
+    "gemini-2.5-pro":
+      input: 1.25
+      output: 5.00
+    "gemini-2.5-flash":
+      input: 0.075
+      output: 0.30
+    "*":
+      input: 1.25
+      output: 5.00
+
+  ollama:
+    "*":
+      input: 0.0
+      output: 0.0
