@@ -1,0 +1,52 @@
+# Worked example: email_classification Task config.
+#
+# This is a TEMPLATE. Copy to your private overlay at the same path and
+# customize for your taxonomy + thresholds. The values below match the
+# public-starter prompt template (prompts/_examples/email/llm-classify.md).
+#
+# Loaded by app.runtime.ai_stack.task.TaskConfig.from_yaml.
+#
+# Tier instantiation (mapping tier_id → live RulesTier / LocalLLMTier / etc.)
+# happens in code; this YAML carries the static parameters only.
+task_id: email_classification
+description: >
+  Two-layer email classification (L1 bucket + L2 intent). Rules try first
+  via keyword baseline; local LLM is the cheap escalation; cloud LLM is the
+  current ceiling; HumanTier handles the long tail via Slack ask.
+
+input_schema_class: app.workers.email_models.EmailMessage
+output_schema_class: app.workers.email_models.EmailClassification
+
+# Cascade stops here at the latest. To graduate to local_llm, run a
+# graduation experiment (see below), get human approval, then move
+# active_tier_id down a step.
+active_tier_id: cloud_llm
+
+escalation_policy: ask_human          # invokes HumanTier on full abstain
+reality_observation_window_days: 7
+
+graduation_thresholds:
+  rules:
+    precision: 0.95
+    recall: 0.80
+  local_llm:
+    precision: 0.85
+    recall: 0.85
+  cloud_llm:
+    precision: 0.90
+    recall: 0.90
+
+# Optional graduation experiment. Uncomment to start a 14-day shadow run
+# of local_llm at 20% sample rate. After the window, GraduationReviewer
+# (next phase) computes P/R against ground-truth records and posts a
+# Slack approval to promote local_llm → active_tier.
+# graduation_experiment:
+#   candidate_tier_id: local_llm
+#   sample_rate: 0.20
+
+metadata:
+  prompt_id: example_email_classify
+  notes: >
+    L1 buckets in the prompt and Level1Classification in
+    app/workers/email_models.py must stay in sync. Update both when you
+    customize the taxonomy in your private overlay.
