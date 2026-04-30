@@ -114,8 +114,10 @@ class TieredTaskRunner:
             active_decision=active_decision,
             decided_at=decided_at,
             reality_observation_window_ends_at=decided_at + task.reality_window,
-            ask_id=ask_id,
         )
+        if ask_id is not None:
+            # link_ask sets ask_id AND flips reality_status to ASKED.
+            record.link_ask(ask_id)
         self.eval_store.append(record)
         return record
 

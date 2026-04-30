@@ -151,18 +151,38 @@ class AskReplyReconciler:
         return None
 
     def _propagate_to_records(self, ask: Ask, *, observed_at: datetime) -> None:
-        if not ask.record_ids or ask.answer is None:
+        """Update every EvalRecord linked to this answered Ask.
+
+        Records are linked two ways: explicitly via `ask.record_ids` (the
+        AskOrchestrator populates this) AND implicitly via the record's own
+        `ask_id` field (the runner sets this when HumanTier creates the
+        ask). We honor both so neither call site has to track the linkage
+        separately.
+        """
+
+        if ask.answer is None:
             return
-        # We need to update each linked EvalRecord. Since the store is JSONL
-        # append-only, we read the latest state, find by record_id, and
-        # append the updated record.
-        latest_records = {
-            rec.record_id: rec
-            for rec in self.eval_store.read_all(self.task_id)
-        }
+
+        all_records = self.eval_store.read_all(self.task_id)
+        # Latest line per record_id wins on fold.
+        latest_by_record_id: dict[str, EvalRecord] = {}
+        for record in all_records:
+            latest_by_record_id[record.record_id] = record
+
+        # Collect every record that should be updated:
+        #   - explicit record_ids on the ask
+        #   - records whose own ask_id field matches this ask
+        targets: dict[str, EvalRecord] = {}
         for record_id in ask.record_ids:
-            record = latest_records.get(record_id)
-            if record is None or record.is_ground_truth:
+            record = latest_by_record_id.get(record_id)
+            if record is not None:
+                targets[record.record_id] = record
+        for record in latest_by_record_id.values():
+            if record.ask_id == ask.ask_id:
+                targets[record.record_id] = record
+
+        for record in targets.values():
+            if record.is_ground_truth:
                 continue
             updated = record.model_copy(deep=True)
             updated.record_reality(
