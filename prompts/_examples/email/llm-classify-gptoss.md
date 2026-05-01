@@ -63,7 +63,7 @@ model should see exactly the same vocabulary as the cloud model.
 Made-up example buckets (replace with yours):
 
 - `customers`, `partners`, `job_hunt`, `personal`, `friends`,
-  `admin_finance`, `newsletters`, `updates`, `other`
+  `finance`, `newsletters`, `updates`, `other`
 
 # Level 2 values (universal)
 
