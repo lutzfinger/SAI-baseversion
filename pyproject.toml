@@ -24,7 +24,17 @@ dependencies = [
   "pydantic>=2.10,<3.0",
   "pydantic-settings>=2.7,<3.0",
   "pyyaml>=6.0,<7.0",
+  # ruamel.yaml: round-trip YAML preserving comments and indent style.
+  # Required for any code that EDITS YAML files — pyyaml's safe_dump
+  # strips comments. Per the standard-libs-first principle; custom
+  # YAML editing destroyed operator annotations in 2026-05-01 testing.
+  "ruamel.yaml>=0.18,<1.0",
   "slack-sdk>=3.36,<4.0",
+  # slack-bolt: event-driven Slack handler. Replaces a hand-rolled
+  # polling loop (silent error swallow, reply de-dup, channel-format
+  # edge cases). Socket Mode = no public HTTPS endpoint needed; events
+  # arrive over a websocket. Per the standard-libs-first principle.
+  "slack-bolt>=1.20,<2.0",
   "uvicorn>=0.34,<1.0",
 ]
 

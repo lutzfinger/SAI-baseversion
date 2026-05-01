@@ -2,12 +2,17 @@ PYTHON ?= .venv/bin/python
 UVICORN_HOST ?= 127.0.0.1
 UVICORN_PORT ?= 8000
 
-.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck log-maintenance log-maintenance-dry
+.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck log-maintenance log-maintenance-dry compose-up compose-down compose-pull-model compose-logs compose-shell
 
 help:
 	@printf '%s\n' \
 		'make install               Editable install + dev extras (re-run after pyproject.toml changes)' \
 		'make dev                   Start the local API' \
+		'make compose-up            Start sai + ollama in docker compose' \
+		'make compose-pull-model    Pull qwen2.5:7b into the compose ollama service' \
+		'make compose-down          Stop containers (keep volumes)' \
+		'make compose-logs          Tail compose logs (sai + ollama)' \
+		'make compose-shell         Open a bash shell in the running sai container' \
 		'make auth-newsletters      Authenticate Gmail for read-only newsletter classification' \
 		'make auth-newsletter-tags  Authenticate Gmail for newsletter tagging' \
 		'make auth-sai-email        Authenticate Gmail for the starter email interaction workflow' \
@@ -65,3 +70,24 @@ lint:
 
 typecheck:
 	@$(PYTHON) -m mypy app tests
+
+# ─── docker compose helpers ────────────────────────────────────────────────
+# A user with Docker installed can run SAI end-to-end without installing
+# Python or Ollama on the host. See README "Quickstart with Docker".
+
+compose-up:
+	@docker compose up -d --build
+	@echo "sai control plane: http://localhost:8000"
+	@echo "to load a local model: make compose-pull-model"
+
+compose-pull-model:
+	@docker compose exec ollama ollama pull qwen2.5:7b
+
+compose-down:
+	@docker compose down
+
+compose-logs:
+	@docker compose logs -f
+
+compose-shell:
+	@docker compose exec sai bash
