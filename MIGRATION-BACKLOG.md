@@ -19,7 +19,7 @@ reshape under the AI-Stack architecture. Each entry below describes:
 |---|---|---|---|
 | `app/tools/travel_operation.py` | `travel_operation` | CloudLLMTier | OpenAI Responses provider (✓ shipped step 9), prompt template, `BookingCandidate`/`BookingDecision` schemas |
 | `app/tools/people_of_interest_research.py` | `people_research` | CloudLLMTier | OpenAI provider (✓), web-search tool wrapper |
-| `app/tools/safe_joke_writer.py` | `slack_joke` | CloudLLMTier | OpenAI provider (✓), per-channel rules |
+| ~~`app/tools/safe_joke_writer.py`~~ MIGRATED 2026-05-01 | `slack_joke` | CloudLLMTier + RulesTier | shipped: `app/tasks/slack_joke.py` (private factory), `app/tasks/slack_joke_io.py` (public schema), `registry/tasks/slack_joke.yaml`, integration test |
 | `app/tools/video_analysis.py` | `video_analysis` | CloudLLMTier (multimodal) | OpenAI provider (✓), video → frame extractor (private-only) |
 | `app/tools/reply_planning.py` | `reply_planning` | CloudLLMTier | OpenAI provider (✓) |
 | `app/workers/email_triage.py` | `email_classification` | runner caller | TaskFactory + the existing email_classification.yaml (✓ shipped step 8) |
@@ -27,7 +27,7 @@ reshape under the AI-Stack architecture. Each entry below describes:
 | `app/workers/task_assistant.py` | `task_assistant` | CloudLLMTier + RulesTier | `TaskApproachPlannerTool` reshape + task config |
 | `app/workers/people_of_interest.py` | `people_research` | runner caller | task config + tier wiring |
 | `app/workers/classification_alignment_intake.py` | `email_classification` (eval pipeline) | reconciler addon | needs `classification_correction` module from private |
-| `app/workers/slack_joke_models.py` | `slack_joke` | runner caller | task config + tier wiring |
+| ~~`app/workers/slack_joke_models.py`~~ MIGRATED 2026-05-01 | `slack_joke` | runner caller | superseded by `app/tasks/slack_joke_io.py` (public schemas) |
 | `app/graphs/reply_planning.py` | `reply_planning` | LangGraph orchestrator | merges into the runner; may not need separate graph |
 
 Plus: `scripts/analyze_video.py` (CLI front-end for video_analysis) — restore when video_analysis lands.
