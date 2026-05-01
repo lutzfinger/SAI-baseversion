@@ -16,20 +16,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Override via SAI_STATE_DIR / SAI_LOGS_DIR / SAI_TOKENS_DIR env vars (pydantic
 # Settings reads SAI_<FIELD> automatically via the env_prefix below).
 #
-#   DEFAULT_STATE_DIR  — mutable runtime state (sqlite DBs, checkpoints,
-#                        background-service heartbeats). macOS standard:
-#                        ~/Library/Application Support/SAI/state
-#   DEFAULT_LOG_DIR    — append-only logs (audit.jsonl, scheduled-job stdout/err,
-#                        ollama-auto.log). macOS standard: ~/Library/Logs/SAI
-#   DEFAULT_TOKENS_DIR — OAuth tokens and secrets staged for connectors.
-#                        ~/.config/sai/tokens (kept separate from state).
-#   DEFAULT_EVAL_DIR   — eval datasets, learning corpus, training artifacts that
-#                        SHOULD be checked in (or kept under version control in
-#                        the private overlay). REPO_ROOT/eval.
+#   DEFAULT_STATE_DIR        — mutable runtime state (sqlite DBs, checkpoints,
+#                              background-service heartbeats). macOS standard:
+#                              ~/Library/Application Support/SAI/state
+#   DEFAULT_LOG_DIR          — append-only logs (audit.jsonl, scheduled-job
+#                              stdout/err, ollama-auto.log). macOS standard:
+#                              ~/Library/Logs/SAI
+#   DEFAULT_TOKENS_DIR       — OAuth tokens and secrets staged for connectors.
+#                              ~/.config/sai/tokens (kept separate from state).
+#   DEFAULT_EVAL_DIR         — VERSIONED eval datasets, training artifacts that
+#                              SHOULD be checked in (or kept under version
+#                              control in the private overlay). REPO_ROOT/eval.
+#                              Read-only at runtime; rebuilt by --build.
+#   DEFAULT_EVAL_RUNTIME_DIR — STATEFUL eval runtime: open Asks, EvalRecord
+#                              JSONL, reconciliation queues. Lives under the OS
+#                              state dir so `sai_cutover.sh --build --clean`
+#                              doesn't nuke production records (principle #8).
+#                              ~/Library/Application Support/SAI/state/eval.
 DEFAULT_STATE_DIR = Path("~/Library/Application Support/SAI/state").expanduser()
 DEFAULT_LOG_DIR = Path("~/Library/Logs/SAI").expanduser()
 DEFAULT_TOKENS_DIR = Path("~/.config/sai/tokens").expanduser()
 DEFAULT_EVAL_DIR = REPO_ROOT / "eval"
+DEFAULT_EVAL_RUNTIME_DIR = DEFAULT_STATE_DIR / "eval"
 
 
 class Settings(BaseSettings):
@@ -98,7 +106,15 @@ class Settings(BaseSettings):
     logs_dir: Path = Field(default=DEFAULT_LOG_DIR)
     tokens_dir: Path = Field(default=DEFAULT_TOKENS_DIR)
     artifacts_dir: Path = Field(default=DEFAULT_STATE_DIR / "artifacts")
+    # learning_dir = VERSIONED datasets in the repo (training fixtures,
+    # golden datasets). Kept under version control. `--build --clean`
+    # rebuilds this from the repos so it's expected to be transient on
+    # disk but reproducible from source.
     learning_dir: Path = Field(default=DEFAULT_EVAL_DIR)
+    # eval_runtime_dir = STATEFUL eval runtime (open Asks, EvalRecord
+    # JSONL, reconciliation pointers). Lives under the OS state dir so
+    # `--build --clean` doesn't wipe production records. Per principle #8.
+    eval_runtime_dir: Path = Field(default=DEFAULT_EVAL_RUNTIME_DIR)
     audit_log_path: Path = Field(default=DEFAULT_LOG_DIR / "audit.jsonl")
     database_path: Path = Field(default=DEFAULT_STATE_DIR / "control_plane.db")
     fact_memory_database_path: Path = Field(
@@ -139,6 +155,7 @@ class Settings(BaseSettings):
         self.tokens_dir.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.learning_dir.mkdir(parents=True, exist_ok=True)
+        self.eval_runtime_dir.mkdir(parents=True, exist_ok=True)
         self.prompts_dir.mkdir(parents=True, exist_ok=True)
         self.policies_dir.mkdir(parents=True, exist_ok=True)
         self.workflows_dir.mkdir(parents=True, exist_ok=True)

@@ -37,12 +37,14 @@ def starter_settings(tmp_path: Path) -> Settings:
     logs_dir = tmp_path / "logs"
     tokens_dir = tmp_path / "tokens"
     learning_dir = tmp_path / "eval"
+    eval_runtime_dir = tmp_path / "eval_runtime"
     return Settings(
         state_dir=state_dir,
         logs_dir=logs_dir,
         tokens_dir=tokens_dir,
         artifacts_dir=state_dir / "artifacts",
         learning_dir=learning_dir,
+        eval_runtime_dir=eval_runtime_dir,
         audit_log_path=logs_dir / "audit.jsonl",
         database_path=state_dir / "control_plane.db",
         fact_memory_database_path=state_dir / "fact_memory.sqlite",

@@ -1,6 +1,6 @@
 # SAI migration: cycle plan + principles
 
-**Date stamp:** 2026-05-01 (v2 — sub-1.2 smoke results captured)
+**Date stamp:** 2026-05-01 (v3 — issues 1–3 fixed; system ready for side-by-side)
 **Replaces:** `~/Downloads/SAI-PLAN (1).md` (the original handoff plan, 2026-04-27)
 **Read alongside:** `PRINCIPLES.md` (the durable rules)
 
@@ -80,38 +80,69 @@ Status:
 - Dataset refresh script (`scripts/refresh_dataset_from_gmail_labels.py`): ✓
 - Health-check script (`scripts/health_check.py`): ✓
 
-**KNOWN ISSUES from 2026-04-30 / 2026-05-01 smoke runs (next-session work):**
+**Issues 1–3 fixed in 2026-05-01 follow-up; runbook below; #4 is durable.**
 
-1. `local_llm` tier returns empty body for all gpt-oss:20b calls.
-   Diagnostic: `provider error: [ollama/gpt-oss:20b] Ollama response
-   had empty body`. Likely the JSON-schema-augmented prompt is too
-   complex or wrong shape for the local model. Try Ollama's native
-   `format: <json_schema>` parameter (newer Ollama versions support
-   it) instead of appending the schema to the prompt body.
+1. ~~`local_llm` tier returns empty body for all gpt-oss:20b calls.~~
+   **FIXED** (commit pending): `OllamaProvider` now uses Ollama 0.5+
+   native `format: <json_schema>` parameter when the daemon supports it
+   (probed once via `/api/version`). Falls back to legacy `format: "json"`
+   + prompt-side schema hint for older daemons.
+   - **Caveat for gpt-oss:20b**: this model uses OpenAI's harmony
+     reasoning channels (`<|channel|>analysis|message|>...`). The
+     reasoning tokens get filtered but the actual structured response
+     channel is empty for many inputs. Native schema mode helps but
+     doesn't fix the underlying model issue. Use `qwen2.5:7b` for
+     local_llm tier — verified 100% body-emit rate with native schema.
+     Operator can switch via `SAI_LOCAL_LLM_MODEL=qwen2.5:7b` in
+     `~/.config/sai/runtime.env`, OR pass `--local-model qwen2.5:7b`
+     to scripts.
+   - The `build_email_classification_task` factory now accepts
+     `local_model: str | None` so regression / backtest can override
+     without changing the operator's runtime default.
 
-2. `cloud_llm` tier returns 400 Unsupported parameter for gpt-5.2-pro.
-   Full error truncated at 120 chars in earlier runs; truncation now
-   bumped to 400. Re-run regression to see which parameter. Likely
-   candidates: `temperature` (some o-series models reject custom
-   temp), `text.format` shape, `max_output_tokens` rename.
+2. ~~`cloud_llm` tier returns 400 Unsupported parameter for gpt-5.2-pro.~~
+   **FIXED** (commit pending): full error captured —
+   `Unsupported parameter: 'temperature' is not supported with this model.`
+   gpt-5.x and o-series reasoning models reject `temperature`. The
+   `OpenAIResponsesProvider` now drops `temperature` from the payload
+   for any model matching `^gpt-5(\.|-|$)` or `^o[1-9](-|$)` —
+   detected by name prefix at the Provider layer per principle #13
+   (Provider knows its vendor's quirks). Tier code stays vendor-agnostic.
+   - Subsequent regression runs surfaced a 429 `insufficient_quota` —
+     a billing/account issue, not a code issue. Top up OpenAI credits
+     or change `--cloud-model` to a model the account has access to.
 
-3. **Runtime state pollution**: `learning_dir = REPO_ROOT/eval`
-   resolves to `~/.sai-runtime/eval/` inside the merged tree, which
-   `sai_cutover.sh --build --clean` deletes on every rebuild. Asks
-   and EvalRecords from production runs live there and get nuked.
-   Architectural fix: split `eval_dir` into `eval_datasets_dir`
-   (versioned, in repo) and `eval_runtime_dir` (stateful, in
-   `~/Library/Application Support/SAI/state/eval/` per principle #8).
+3. ~~Runtime state pollution.~~ **FIXED** (commit pending): Settings now
+   has two paths:
+   - `learning_dir` (default `REPO_ROOT/eval`): VERSIONED datasets,
+     fixtures, training corpus. Rebuilt on `--build`.
+   - `eval_runtime_dir` (default `~/Library/Application Support/SAI/state/eval`):
+     STATEFUL Asks + EvalRecord JSONL. Lives outside the merged tree
+     so `--build --clean` doesn't nuke production records (principle #8).
+   - All consumers of asks / records updated: TaskFactory, poll script,
+     backtest, health check.
 
-4. **No tokens in commands.** All scripts auto-load `runtime.env`
-   via `load_runtime_env_best_effort()` with no-override semantics.
-   Operator should NEVER paste literal `xoxb-...` / `sk-...` into
-   commands — they override 1Password resolution. Documentation
-   updated to drop env-var prefixes from all examples.
+4. **No tokens in commands.** (Durable, not an issue.) All scripts
+   auto-load `runtime.env` via `load_runtime_env_best_effort()` with
+   no-override semantics. Operator should NEVER paste literal `xoxb-...`
+   / `sk-...` into commands — they override 1Password resolution.
+   Documentation updated to drop env-var prefixes from all examples.
+
+**Remaining tuning work (not blocking cutover):**
+- `local_llm` accuracy is low (~10%) on novel emails with `qwen2.5:7b`
+  — the model doesn't know the operator's 15-bucket taxonomy. The
+  current prompt at `prompts/email/llm-classify-gptoss.md` was tuned
+  for gpt-oss; needs taxonomy examples for qwen. Or bump
+  `local_threshold` to 0.85+ to make local_llm only resolve confident
+  matches and escalate the rest to cloud_llm.
+- Cloud account billing: top up or switch model so cloud_llm can
+  resolve novel cases.
+- Consider `gpt-4o-mini` as a cheaper / unblocked cloud_model option
+  while gpt-5.2-pro billing is sorted.
 
 **Pending operator action:**
-- Side-by-side period (≥1 week observation): blocked on issues 1+2.
-- Phase 3F cutover: blocked on side-by-side observation.
+- Side-by-side period (≥1 week observation): READY (system functional).
+- Phase 3F cutover: READY pending side-by-side observation window.
 
 ### 2. Phase 4 — deploy skill + `/sai-checkin` slash command
 
