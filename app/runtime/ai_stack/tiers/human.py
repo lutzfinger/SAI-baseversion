@@ -63,11 +63,29 @@ class HumanTier:
         self.confidence_threshold = confidence_threshold
 
     def predict(self, input_data: dict[str, Any]) -> Prediction:
-        ask_id = self.ask_poster.post_ask(
-            task_id=self.task_id,
-            input_data=input_data,
-            question_text=self.question_template,
-        )
+        try:
+            ask_id = self.ask_poster.post_ask(
+                task_id=self.task_id,
+                input_data=input_data,
+                question_text=self.question_template,
+            )
+        except Exception as exc:
+            # Posting the ask failed (Slack down, channel missing, no auth,
+            # etc.). The cascade can't get human input here, but it
+            # shouldn't crash the whole run — abstain with the error in
+            # metadata. The runner falls back per escalation_policy.
+            return Prediction(
+                tier_id=self.tier_id,
+                output={},
+                confidence=0.0,
+                abstained=True,
+                reasoning=f"ask_poster failed: {type(exc).__name__}: {exc}"[:240],
+                metadata={
+                    "awaiting_human": False,
+                    "ask_failed": True,
+                    "error_type": type(exc).__name__,
+                },
+            )
         return Prediction(
             tier_id=self.tier_id,
             output={},

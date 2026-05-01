@@ -65,3 +65,27 @@ def test_human_tier_kind() -> None:
     poster = _StubAskPoster()
     tier = HumanTier(tier_id="human", ask_poster=poster, task_id="x")
     assert tier.tier_kind == TierKind.HUMAN
+
+
+class _BrokenAskPoster:
+    """Always raises; simulates Slack errors (channel_not_found, auth, etc.)."""
+
+    def post_ask(self, **_kwargs: Any) -> str:
+        raise RuntimeError("channel_not_found")
+
+
+def test_human_tier_swallows_post_failure_into_abstain() -> None:
+    """A failing ask_poster must NOT crash the cascade. The Tier returns
+    abstain with error metadata; the runner falls back per escalation
+    policy (typically USE_ACTIVE → active_tier's output)."""
+
+    tier = HumanTier(
+        tier_id="human", ask_poster=_BrokenAskPoster(), task_id="email_classification"
+    )
+    pred = tier.predict({"subject": "x"})
+    assert pred.abstained is True
+    assert pred.confidence == 0.0
+    assert pred.metadata.get("ask_failed") is True
+    assert pred.metadata.get("error_type") == "RuntimeError"
+    assert pred.metadata.get("awaiting_human") is False
+    assert "channel_not_found" in (pred.reasoning or "")
