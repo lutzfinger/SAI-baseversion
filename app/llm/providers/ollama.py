@@ -22,8 +22,14 @@ plain JSON-mode call without schema enforcement. Detected via Ollama's
 Cost is 0 by default (local). If you self-host on rented GPU and want ROI
 accounting, override `provider_id="ollama"` rates in the cost table.
 
-Uses `urllib.request` from the standard library to avoid pulling httpx into the
-core dependency set. Connections are short-lived (one request per predict call).
+## HTTP client: httpx
+
+Uses `httpx` instead of `urllib.request`. Per the standard-libs-first
+principle: httpx provides connection pooling, sane timeouts (separate
+connect / read / write / pool budgets), automatic retries, and better
+error surfacing than urllib's catch-all `URLError`. Adds httpx to the
+core dependency set; the trade-off is small because httpx is already
+present (it's a transitive of openai / langchain).
 """
 
 from __future__ import annotations
@@ -31,8 +37,8 @@ from __future__ import annotations
 import json
 from time import perf_counter
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 from app.llm.cost import CostTable, get_default_cost_table
 from app.llm.provider import LLMProviderError, LLMRequest, LLMResponse, TokenUsage
@@ -57,6 +63,7 @@ class OllamaProvider:
         timeout_seconds: int = 45,
         cost_table: CostTable | None = None,
         force_legacy_json_format: bool = False,
+        retries: int = 2,
     ) -> None:
         self.model = model
         self.host = host.rstrip("/")
@@ -66,13 +73,28 @@ class OllamaProvider:
         # Lazy: set on first predict() so construction stays cheap and
         # the Ollama daemon doesn't need to be up at import time.
         self._supports_native_schema: bool | None = None
+        # httpx transport with built-in retry. Connect failures and
+        # transient I/O errors are retried `retries` times with
+        # exponential backoff before httpx raises. Eliminates the
+        # "single transient blip → cascade abstain" failure mode that
+        # the previous urllib-based implementation had.
+        self._transport = httpx.HTTPTransport(retries=retries)
+        self._client = httpx.Client(
+            transport=self._transport,
+            timeout=httpx.Timeout(
+                connect=5.0,
+                read=float(timeout_seconds),
+                write=5.0,
+                pool=5.0,
+            ),
+        )
 
     def predict(self, request: LLMRequest) -> LLMResponse:
         if self._supports_native_schema is None:
             self._supports_native_schema = (
                 False
                 if self._force_legacy_json_format
-                else _detect_native_schema_support(self.host, self.timeout_seconds)
+                else _detect_native_schema_support(self._client, self.host)
             )
 
         options: dict[str, Any] = {"temperature": request.temperature}
@@ -99,20 +121,13 @@ class OllamaProvider:
             "format": format_value,
             "options": options,
         }
-        url = f"{self.host}/api/generate"
-        encoded = json.dumps(body).encode("utf-8")
-        req = Request(  # noqa: S310 - safe URL construction
-            url,
-            data=encoded,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
 
         started = perf_counter()
         try:
-            with urlopen(req, timeout=self.timeout_seconds) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, OSError, json.JSONDecodeError) as exc:
+            response = self._client.post(f"{self.host}/api/generate", json=body)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, json.JSONDecodeError) as exc:
             raise LLMProviderError(
                 f"Ollama request failed: {exc}",
                 provider_id=self.provider_id,
@@ -174,19 +189,26 @@ def _augment_prompt_with_schema(
     )
 
 
-def _detect_native_schema_support(host: str, timeout_seconds: int) -> bool:
+def _detect_native_schema_support(client: httpx.Client, host: str) -> bool:
     """Probe `/api/version`. Return True if Ollama ≥0.5.
 
     Failure to reach the daemon defaults to False (safer: legacy path
     still works against any Ollama). Daemon reachability errors will
     surface again on the actual generate call with full context.
+
+    Uses a 3-second connect+read budget — version probes shouldn't
+    take longer than that, and we don't want to delay first call
+    significantly if the daemon is briefly slow.
     """
 
     try:
-        url = f"{host.rstrip('/')}/api/version"
-        with urlopen(url, timeout=min(timeout_seconds, 3)) as response:  # noqa: S310
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError):
+        response = client.get(
+            f"{host.rstrip('/')}/api/version",
+            timeout=httpx.Timeout(connect=3.0, read=3.0, write=3.0, pool=3.0),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError):
         return False
     version_str = str(payload.get("version") or "")
     return _version_at_least(version_str, _NATIVE_SCHEMA_MIN_VERSION)

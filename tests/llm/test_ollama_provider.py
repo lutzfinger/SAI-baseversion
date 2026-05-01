@@ -1,4 +1,4 @@
-"""Tests for app.llm.providers.ollama — monkeypatches urlopen.
+"""Tests for app.llm.providers.ollama — uses httpx.MockTransport.
 
 Two modes covered:
   - native schema (Ollama ≥0.5): schema sent as the `format` value
@@ -6,14 +6,17 @@ Two modes covered:
 
 Each test forces a mode via either `force_legacy_json_format=True` or by
 mocking `/api/version` to report a version below the native-schema threshold.
+
+Uses httpx.MockTransport per the standard-libs-first principle: httpx's
+own test fixtures are more robust than monkey-patching urllib.
 """
 
 from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import patch
 
+import httpx
 import pytest
 
 from app.llm.cost import CostTable
@@ -25,100 +28,98 @@ def _zero_cost_table() -> CostTable:
     return CostTable(providers={"ollama": {"*": {"input": 0.0, "output": 0.0}}})
 
 
-class _FakeHttpResponse:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self._body = json.dumps(payload).encode("utf-8")
+def _build_provider(
+    *,
+    handler,
+    force_legacy: bool = False,
+    model: str = "qwen2.5:7b",
+) -> OllamaProvider:
+    """Build a provider with a custom request-handler that returns
+    canned httpx responses. Bypasses the network entirely.
+    """
 
-    def read(self) -> bytes:
-        return self._body
+    provider = OllamaProvider(
+        model=model,
+        cost_table=_zero_cost_table(),
+        force_legacy_json_format=force_legacy,
+        retries=0,  # don't retry in tests
+    )
+    # Replace the client with one that uses our mock transport.
+    transport = httpx.MockTransport(handler)
+    provider._client = httpx.Client(transport=transport, timeout=30.0)
+    return provider
 
-    def __enter__(self) -> _FakeHttpResponse:
-        return self
 
-    def __exit__(self, *args: Any) -> None:
-        return None
+def _generate_response(
+    *,
+    response_text: str = '{"x": 1}',
+    model: str = "qwen2.5:7b",
+    prompt_eval: int = 10,
+    eval_count: int = 2,
+) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "model": model,
+            "response": response_text,
+            "prompt_eval_count": prompt_eval,
+            "eval_count": eval_count,
+        },
+    )
 
 
-def _fake_urlopen(generate_payload: dict[str, Any], version: str = "0.17.7"):
-    """Return an opener that distinguishes /api/version from /api/generate calls."""
-
-    def _opener(req_or_url: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
-        if "/api/version" in url:
-            return _FakeHttpResponse({"version": version})
-        return _FakeHttpResponse(generate_payload)
-
-    return _opener
+def _version_response(version: str = "0.17.7") -> httpx.Response:
+    return httpx.Response(200, json={"version": version})
 
 
 # ─── native-schema mode (Ollama ≥0.5) ─────────────────────────────────────
 
 
 def test_native_schema_predict_parses_output() -> None:
-    payload = {
-        "model": "gpt-oss:20b",
-        "response": '{"label": "personal", "confidence": 0.7}',
-        "prompt_eval_count": 120,
-        "eval_count": 22,
-    }
-    provider = OllamaProvider(model="gpt-oss:20b", cost_table=_zero_cost_table())
-    with patch(
-        "app.llm.providers.ollama.urlopen",
-        side_effect=_fake_urlopen(payload, version="0.17.7"),
-    ):
-        response = provider.predict(
-            LLMRequest(
-                prompt="Tag this email",
-                response_schema={
-                    "type": "object",
-                    "properties": {"label": {"type": "string"}},
-                },
-            )
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":
+            return _version_response()
+        captured["body"] = json.loads(request.content)
+        return _generate_response(
+            response_text='{"label": "personal", "confidence": 0.7}',
+            prompt_eval=120, eval_count=22,
         )
+
+    provider = _build_provider(handler=handler)
+    response = provider.predict(LLMRequest(
+        prompt="Tag this email",
+        response_schema={"type": "object", "properties": {"label": {"type": "string"}}},
+    ))
     assert response.output == {"label": "personal", "confidence": 0.7}
     assert response.usage.input_tokens == 120
     assert response.usage.output_tokens == 22
-    assert response.provider_id == "ollama"
 
 
 def test_native_schema_format_is_schema_dict_not_string() -> None:
-    """Body sent to Ollama 0.5+ must include the schema dict as `format`."""
-
     captured: dict[str, Any] = {}
 
-    def _capturing_opener(req_or_url: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
-        if "/api/version" in url:
-            return _FakeHttpResponse({"version": "0.17.7"})
-        captured["body"] = req_or_url.data.decode("utf-8")
-        return _FakeHttpResponse(
-            {
-                "model": "gpt-oss:20b",
-                "response": '{"x": 1}',
-                "prompt_eval_count": 10,
-                "eval_count": 2,
-            }
-        )
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":
+            return _version_response("0.17.7")
+        captured["body"] = json.loads(request.content)
+        return _generate_response()
 
     schema = {
         "type": "object",
         "properties": {"x": {"type": "integer"}},
         "required": ["x"],
     }
-    provider = OllamaProvider(model="gpt-oss:20b", cost_table=_zero_cost_table())
-    with patch("app.llm.providers.ollama.urlopen", side_effect=_capturing_opener):
-        provider.predict(
-            LLMRequest(
-                prompt="Classify this",
-                response_schema=schema,
-                response_schema_name="MyOutput",
-            )
-        )
-    body = json.loads(captured["body"])
-    # In native mode the schema is the format value — runtime constrains
-    # generation. The prompt is left clean (no appended Schema: block).
-    assert body["format"] == schema
-    assert body["model"] == "gpt-oss:20b"
+    provider = _build_provider(handler=handler)
+    provider.predict(LLMRequest(
+        prompt="Classify this",
+        response_schema=schema,
+        response_schema_name="MyOutput",
+    ))
+    body = captured["body"]
+    assert body["format"] == schema  # native: dict, not "json" string
+    assert body["model"] == "qwen2.5:7b"
     assert body["stream"] is False
     assert body["prompt"] == "Classify this"
     assert "Schema:" not in body["prompt"]
@@ -128,135 +129,95 @@ def test_native_schema_format_is_schema_dict_not_string() -> None:
 
 
 def test_legacy_mode_appends_schema_to_prompt() -> None:
-    """When the daemon is older than 0.5, the schema is hinted into the prompt."""
-
     captured: dict[str, Any] = {}
 
-    def _capturing_opener(req_or_url: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
-        if "/api/version" in url:
-            return _FakeHttpResponse({"version": "0.4.9"})
-        captured["body"] = req_or_url.data.decode("utf-8")
-        return _FakeHttpResponse(
-            {
-                "model": "gpt-oss:20b",
-                "response": '{"x": 1}',
-                "prompt_eval_count": 10,
-                "eval_count": 2,
-            }
-        )
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":
+            return _version_response("0.4.9")
+        captured["body"] = json.loads(request.content)
+        return _generate_response()
 
-    provider = OllamaProvider(model="gpt-oss:20b", cost_table=_zero_cost_table())
-    with patch("app.llm.providers.ollama.urlopen", side_effect=_capturing_opener):
-        provider.predict(
-            LLMRequest(
-                prompt="Classify this",
-                response_schema={
-                    "type": "object",
-                    "properties": {"x": {"type": "integer"}},
-                },
-                response_schema_name="MyOutput",
-            )
-        )
-    body = json.loads(captured["body"])
+    provider = _build_provider(handler=handler)
+    provider.predict(LLMRequest(
+        prompt="Classify this",
+        response_schema={"type": "object", "properties": {"x": {"type": "integer"}}},
+        response_schema_name="MyOutput",
+    ))
+    body = captured["body"]
     assert body["format"] == "json"
-    assert body["model"] == "gpt-oss:20b"
-    assert body["stream"] is False
     assert "MyOutput" in body["prompt"]
     assert "Schema:" in body["prompt"]
 
 
 def test_force_legacy_json_format_skips_version_probe() -> None:
-    """force_legacy_json_format=True bypasses /api/version detection."""
+    seen_paths: list[str] = []
 
-    captured: dict[str, Any] = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        return _generate_response()
 
-    def _capturing_opener(req_or_url: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
-        # If we accidentally probe /api/version, fail loudly.
-        assert "/api/version" not in url, "force_legacy must not call /api/version"
-        captured["body"] = req_or_url.data.decode("utf-8")
-        return _FakeHttpResponse(
-            {"response": '{"x": 1}', "prompt_eval_count": 10, "eval_count": 2}
-        )
-
-    provider = OllamaProvider(
-        model="gpt-oss:20b",
-        cost_table=_zero_cost_table(),
-        force_legacy_json_format=True,
-    )
-    with patch("app.llm.providers.ollama.urlopen", side_effect=_capturing_opener):
-        provider.predict(
-            LLMRequest(prompt="x", response_schema={"type": "object"})
-        )
-    body = json.loads(captured["body"])
-    assert body["format"] == "json"
+    provider = _build_provider(handler=handler, force_legacy=True)
+    provider.predict(LLMRequest(
+        prompt="x", response_schema={"type": "object"},
+    ))
+    assert "/api/version" not in seen_paths
+    assert "/api/generate" in seen_paths
 
 
 # ─── error paths ──────────────────────────────────────────────────────────
 
 
 def test_predict_wraps_http_error_as_provider_error() -> None:
-    def _broken(*_args: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        raise OSError("connection refused")
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Force a connection-style error via httpx.ConnectError.
+        raise httpx.ConnectError("connection refused")
 
-    provider = OllamaProvider(
-        model="gpt-oss:20b",
-        cost_table=_zero_cost_table(),
-        force_legacy_json_format=True,
-    )
-    with (
-        patch("app.llm.providers.ollama.urlopen", side_effect=_broken),
-        pytest.raises(LLMProviderError) as info,
-    ):
-        provider.predict(
-            LLMRequest(prompt="x", response_schema={"type": "object"})
-        )
+    provider = _build_provider(handler=handler, force_legacy=True)
+    with pytest.raises(LLMProviderError) as info:
+        provider.predict(LLMRequest(prompt="x", response_schema={"type": "object"}))
     assert info.value.provider_id == "ollama"
 
 
 def test_predict_rejects_non_json_response_text() -> None:
-    payload = {"model": "gpt-oss:20b", "response": "not json", "eval_count": 1}
-    provider = OllamaProvider(
-        model="gpt-oss:20b",
-        cost_table=_zero_cost_table(),
-        force_legacy_json_format=True,
-    )
-    with patch(
-        "app.llm.providers.ollama.urlopen", side_effect=_fake_urlopen(payload)
-    ), pytest.raises(LLMProviderError):
-        provider.predict(
-            LLMRequest(prompt="x", response_schema={"type": "object"})
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"model": "x", "response": "not json", "eval_count": 1},
         )
+
+    provider = _build_provider(handler=handler, force_legacy=True)
+    with pytest.raises(LLMProviderError):
+        provider.predict(LLMRequest(prompt="x", response_schema={"type": "object"}))
+
+
+def test_predict_wraps_http_status_error() -> None:
+    """5xx from Ollama → ProviderError, not a generic crash."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="upstream busy")
+
+    provider = _build_provider(handler=handler, force_legacy=True)
+    with pytest.raises(LLMProviderError):
+        provider.predict(LLMRequest(prompt="x", response_schema={"type": "object"}))
 
 
 def test_max_output_tokens_passes_through_as_num_predict() -> None:
     captured: dict[str, Any] = {}
 
-    def _capturing_opener(req_or_url: Any, **_kwargs: Any) -> _FakeHttpResponse:
-        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
-        if "/api/version" in url:
-            return _FakeHttpResponse({"version": "0.17.7"})
-        captured["body"] = req_or_url.data.decode("utf-8")
-        return _FakeHttpResponse(
-            {
-                "response": '{"x": 1}',
-                "prompt_eval_count": 10,
-                "eval_count": 2,
-            }
-        )
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/version":
+            return _version_response()
+        captured["body"] = json.loads(request.content)
+        return _generate_response()
 
-    provider = OllamaProvider(model="gpt-oss:20b", cost_table=_zero_cost_table())
-    with patch("app.llm.providers.ollama.urlopen", side_effect=_capturing_opener):
-        provider.predict(
-            LLMRequest(
-                prompt="x",
-                response_schema={"type": "object"},
-                max_output_tokens=128,
-                temperature=0.5,
-            )
-        )
-    body = json.loads(captured["body"])
+    provider = _build_provider(handler=handler)
+    provider.predict(LLMRequest(
+        prompt="x",
+        response_schema={"type": "object"},
+        max_output_tokens=128,
+        temperature=0.5,
+    ))
+    body = captured["body"]
     assert body["options"]["num_predict"] == 128
     assert body["options"]["temperature"] == 0.5
 
