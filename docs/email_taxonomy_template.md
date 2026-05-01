@@ -26,9 +26,9 @@ operator's bucket meanings diverge from what the prompts encode.
 
 2. **The reference for keyword-rule additions.** Every entry in
    `prompts/email/keyword-classify.md` should be derivable from the doc.
-   "Why is `noreply-payments@booking.com` in `invoices` and
-   `noreply@booking.com` in `updates`?" — the answer is in the doc's
-   bucket definitions.
+   When two senders from the same domain map to different buckets, the
+   doc explains *why* — and the rules table reflects that distinction.
+   The keyword baseline is data; the doc is the rationale.
 
 3. **The grounding for prompt few-shots.** The LLM tier prompts
    (`prompts/email/llm-classify-cloud.md`,
