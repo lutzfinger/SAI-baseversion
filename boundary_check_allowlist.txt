@@ -47,3 +47,8 @@ MIGRATION-PRINCIPLES.md
 # (Lutz_Dev/SAI) when describing the per-task migration steps, since
 # the migration is concretely from that path to the merged runtime.
 # Replaceable per cycle; always tagged with date.
+
+SUPPLIERS.md
+# References `op://` and `keychain://` schemes inside the
+# 1Password / macOS Keychain table rows as legitimate documentation
+# of the secret-resolution patterns themselves (not actual references).

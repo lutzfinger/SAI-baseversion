@@ -8,7 +8,7 @@ upstream tool that SAI depends on. It exists for two reasons:
    Subscribe to the listed advisory feed for each supplier and treat
    updates here as part of the normal commit flow.
 
-2. **Architectural transparency.** Per `PRINCIPLES.md` #25 (standard
+2. **Architectural transparency.** Per the standard-libs-first principle (standard
    libraries before custom code), we deliberately favour mature
    libraries over hand-rolled infrastructure. This file is the
    inventory that makes the trade-off auditable: every listed entry
@@ -57,6 +57,7 @@ upstream tool that SAI depends on. It exists for two reasons:
 | `langchain-openai` | OpenAI provider for LangChain | `>=0.3.9,<2.0` | <https://github.com/langchain-ai/langchain> |
 | `langsmith` | tracing / eval reporting | `>=0.7,<1.0` | <https://github.com/langchain-ai/langsmith-sdk/security/advisories> |
 | `pypdf` | PDF text extraction | `>=5.4,<6.0` | <https://github.com/py-pdf/pypdf/security/advisories> |
+| `httpx` | HTTP client (Ollama provider, with retries) | `>=0.28,<1.0` | <https://github.com/encode/httpx/security/advisories> |
 
 ## Dev / test dependencies
 
@@ -66,7 +67,6 @@ upstream tool that SAI depends on. It exists for two reasons:
 | `pytest-xdist` | parallel test exec | `>=3.6,<4.0` |
 | `mypy` | static type checking | `>=1.15,<2.0` |
 | `ruff` | linting + formatting | `>=0.11,<1.0` |
-| `httpx` | test HTTP client | `>=0.28,<1.0` |
 
 ## External services (operator-side)
 
@@ -101,17 +101,17 @@ Models live in `~/.ollama/models` on the host (or in the
 
 ## Standard-library replacements we deliberately stay on
 
-Per `PRINCIPLES.md` #25, we do NOT add a library when stdlib covers
+Per the standard-libs-first principle, we do NOT add a library when stdlib covers
 the use case. These are documented here so future audits see the
 deliberate choice:
 
 | Use case | Library considered | Decision | Reason |
 |---|---|---|---|
-| HTTP client | `httpx`, `requests` | stdlib `urllib` (currently used in Ollama provider) | **Phase 1 migration pending** — switch to `httpx` for retry support. Tracked in `MIGRATION-PRINCIPLES.md`. |
+| HTTP client | `requests` | `httpx` (now used in Ollama provider after the Phase 1 migration) | Migration complete — provides connection pooling, retries, and structured timeouts. |
 | Logging | `structlog`, `loguru` | stdlib `logging` | **Phase 3 migration pending** — replace ad-hoc `print()` calls. |
 | JSON parsing | `orjson`, `ujson` | stdlib `json` | Performance not currently a bottleneck. |
 | File locking | `filelock`, `portalocker` | shell `mkdir <dir>` pattern in launchd scripts | Adequate for single-host single-operator. |
-| Hash verification | various manifest libs | stdlib `hashlib` + custom 30-line manifest | Tiny surface, fail-closed semantics; library overhead exceeds value (per principle #25 exception 1). |
+| Hash verification | various manifest libs | stdlib `hashlib` + custom 30-line manifest | Tiny surface, fail-closed semantics; library overhead exceeds value (per the principle exception for tiny well-understood surfaces). |
 | Audit log format | various log libs | append-only JSONL written by hand | Operator-greppable, line-oriented; obscuring it inside a library hurts debugging. |
 
 ## Custom infrastructure (NOT outsourced — yet)
@@ -124,7 +124,7 @@ visible:
 |---|---|---|---|
 | LLM provider abstraction (`app/llm/providers/*.py`) | `litellm` | **Phase 2 migration** | Keep our `Provider` Protocol; back it with LiteLLM for the actual vendor calls. |
 | AskStore / EvalRecordStore (custom JSONL) | `sqlite3` (stdlib) with WAL | **Phase 2 migration** | JSONL has no atomicity; concurrent writes can corrupt. |
-| Slack polling daemon (`scripts/apply_qa_suggestions.py`) | `slack-bolt` Socket Mode | **Phase 1 migration in progress** | 7 self-inflicted bugs already (see `PRINCIPLES.md` #25 commit). |
+| Slack polling daemon (`scripts/apply_qa_suggestions.py`) | `slack-bolt` Socket Mode | **Phase 1 migration in progress** | 7 self-inflicted bugs already (see PRINCIPLES.md). |
 
 ---
 
