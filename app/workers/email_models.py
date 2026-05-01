@@ -26,7 +26,7 @@ Level1Classification = Literal[
     "job_hunt",
     "personal",
     "friends",
-    "admin_finance",
+    "finance",
     "newsletters",
     "updates",
     "other",
@@ -43,7 +43,7 @@ LEVEL1_DISPLAY_NAMES: dict[str, str] = {
     "job_hunt": "Job Hunt",
     "personal": "Personal",
     "friends": "Friends",
-    "admin_finance": "Finance",
+    "finance": "Finance",
     "newsletters": "Newsletters",
     "updates": "Updates",
 }

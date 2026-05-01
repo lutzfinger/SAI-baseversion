@@ -80,7 +80,7 @@ Made-up example buckets (replace with yours):
 - `job_hunt`: recruiting, interview, candidacy threads
 - `personal`: human interactions outside work (acquaintances)
 - `friends`: close friends and family
-- `admin_finance`: banking, tax, finance admin
+- `finance`: banking, tax, finance admin
 - `newsletters`: subscription newsletters and digests
 - `updates`: transactional / account / service updates (no action needed)
 - `other`: unresolved fallback (default Inbox; no taxonomy label)
