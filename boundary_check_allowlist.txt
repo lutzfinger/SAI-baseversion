@@ -35,3 +35,15 @@ CUSTOMIZE-ME.md
 # keychain:// (macOS Keychain) reference syntax so users know how to wire
 # their own secrets without committing them. Must show the schemes to
 # explain them.
+
+PRINCIPLES.md
+# The project's core-principles charter. Documents the op:// /
+# keychain:// secret-reference convention and the boundary-linter's
+# enforcement targets (/Users/..., personal strings) — so it has to
+# mention them by name to explain the rules.
+
+MIGRATION-PRINCIPLES.md
+# The current migration cycle's plan. References private repo paths
+# (Lutz_Dev/SAI) when describing the per-task migration steps, since
+# the migration is concretely from that path to the merged runtime.
+# Replaceable per cycle; always tagged with date.
