@@ -1,6 +1,6 @@
 # SAI migration: cycle plan + principles
 
-**Date stamp:** 2026-04-30
+**Date stamp:** 2026-05-01 (v2 — sub-1.2 smoke results captured)
 **Replaces:** `~/Downloads/SAI-PLAN (1).md` (the original handoff plan, 2026-04-27)
 **Read alongside:** `PRINCIPLES.md` (the durable rules)
 
@@ -75,10 +75,43 @@ Status:
 - Sub 1-2c (runbook at `docs/EMAIL-CLASSIFIER-MIGRATION.md`): ✓
 - L1-aware reply parser (private wires public factory): ✓
 - Slack Ask UI: email-aware formatting + confirmation/clarification: ✓
-- `scripts/poll_eval_replies.py` polling daemon: ✓
-- Smoke 2-4 with real Gmail + OpenAI + Slack: pending operator
-- Side-by-side period (≥1 week observation): pending
-- Phase 3F cutover (interactive plist flip): pending
+- `scripts/poll_eval_replies.py` polling daemon: ✓ (Slack auth verified)
+- Regression evaluator (`scripts/regression_test_email_classifier.py`): ✓
+- Dataset refresh script (`scripts/refresh_dataset_from_gmail_labels.py`): ✓
+- Health-check script (`scripts/health_check.py`): ✓
+
+**KNOWN ISSUES from 2026-04-30 / 2026-05-01 smoke runs (next-session work):**
+
+1. `local_llm` tier returns empty body for all gpt-oss:20b calls.
+   Diagnostic: `provider error: [ollama/gpt-oss:20b] Ollama response
+   had empty body`. Likely the JSON-schema-augmented prompt is too
+   complex or wrong shape for the local model. Try Ollama's native
+   `format: <json_schema>` parameter (newer Ollama versions support
+   it) instead of appending the schema to the prompt body.
+
+2. `cloud_llm` tier returns 400 Unsupported parameter for gpt-5.2-pro.
+   Full error truncated at 120 chars in earlier runs; truncation now
+   bumped to 400. Re-run regression to see which parameter. Likely
+   candidates: `temperature` (some o-series models reject custom
+   temp), `text.format` shape, `max_output_tokens` rename.
+
+3. **Runtime state pollution**: `learning_dir = REPO_ROOT/eval`
+   resolves to `~/.sai-runtime/eval/` inside the merged tree, which
+   `sai_cutover.sh --build --clean` deletes on every rebuild. Asks
+   and EvalRecords from production runs live there and get nuked.
+   Architectural fix: split `eval_dir` into `eval_datasets_dir`
+   (versioned, in repo) and `eval_runtime_dir` (stateful, in
+   `~/Library/Application Support/SAI/state/eval/` per principle #8).
+
+4. **No tokens in commands.** All scripts auto-load `runtime.env`
+   via `load_runtime_env_best_effort()` with no-override semantics.
+   Operator should NEVER paste literal `xoxb-...` / `sk-...` into
+   commands — they override 1Password resolution. Documentation
+   updated to drop env-var prefixes from all examples.
+
+**Pending operator action:**
+- Side-by-side period (≥1 week observation): blocked on issues 1+2.
+- Phase 3F cutover: blocked on side-by-side observation.
 
 ### 2. Phase 4 — deploy skill + `/sai-checkin` slash command
 
