@@ -11,6 +11,7 @@ from app.llm.cost import CostTable
 from app.llm.provider import LLMProviderError, LLMRequest
 from app.llm.providers.openai_responses import (
     OpenAIResponsesProvider,
+    _model_supports_temperature,
     _to_strict_schema,
 )
 
@@ -143,6 +144,58 @@ def test_predict_extracts_cached_input_tokens() -> None:
         LLMRequest(prompt="x", response_schema={"type": "object"})
     )
     assert response.usage.cached_input_tokens == 80
+
+
+def test_model_supports_temperature_legacy_models() -> None:
+    """gpt-4o and pre-5 models DO accept temperature."""
+
+    assert _model_supports_temperature("gpt-4o")
+    assert _model_supports_temperature("gpt-4o-mini")
+    assert _model_supports_temperature("gpt-4-turbo")
+    assert _model_supports_temperature("gpt-3.5-turbo")
+
+
+def test_model_supports_temperature_gpt5_family_rejected() -> None:
+    """gpt-5 family rejects temperature — provider must drop it."""
+
+    assert not _model_supports_temperature("gpt-5")
+    assert not _model_supports_temperature("gpt-5-pro")
+    assert not _model_supports_temperature("gpt-5.2-pro")
+    assert not _model_supports_temperature("gpt-5-mini")
+
+
+def test_model_supports_temperature_reasoning_models_rejected() -> None:
+    """o1 / o3 / o4 reasoning models reject temperature."""
+
+    assert not _model_supports_temperature("o1")
+    assert not _model_supports_temperature("o1-mini")
+    assert not _model_supports_temperature("o3")
+    assert not _model_supports_temperature("o3-mini")
+    assert not _model_supports_temperature("o4-mini")
+
+
+def test_predict_drops_temperature_for_gpt5() -> None:
+    """Payload sent to gpt-5.2-pro must NOT contain temperature."""
+
+    fake = _FakeResponses(response=_build_response(output_text='{"x": 1}', model="gpt-5.2-pro"))
+    provider = OpenAIResponsesProvider(
+        model="gpt-5.2-pro", client=_FakeOpenAIClient(fake), cost_table=_zero_cost_table()
+    )
+    provider.predict(LLMRequest(prompt="x", response_schema={"type": "object"}, temperature=0.7))
+    sent = fake.calls[0]
+    assert "temperature" not in sent, f"temperature must be dropped for gpt-5.x; got {sent}"
+
+
+def test_predict_includes_temperature_for_gpt4() -> None:
+    """gpt-4o still receives temperature in the payload."""
+
+    fake = _FakeResponses(response=_build_response(output_text='{"x": 1}'))
+    provider = OpenAIResponsesProvider(
+        model="gpt-4o", client=_FakeOpenAIClient(fake), cost_table=_zero_cost_table()
+    )
+    provider.predict(LLMRequest(prompt="x", response_schema={"type": "object"}, temperature=0.7))
+    sent = fake.calls[0]
+    assert sent.get("temperature") == 0.7
 
 
 def test_to_strict_schema_handles_nested_objects() -> None:

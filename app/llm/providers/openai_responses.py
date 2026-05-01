@@ -8,11 +8,24 @@ being sent — this is what the OpenAI strict-output spec requires.
 
 Cost is computed from `usage` via `app.llm.cost.CostTable` against
 `provider_id="openai"` and the model name.
+
+## Reasoning-model parameter handling
+
+GPT-5.x and the o-series (o1, o3, o4) reject `temperature` outright with
+`Unsupported parameter: 'temperature' is not supported with this model.`
+The provider detects these by name prefix and silently drops `temperature`
+from the payload. This is a vendor-specific quirk that belongs in the
+Provider (per the pluggable Provider abstraction principle) — tier code
+stays vendor-agnostic.
+
+When the list of unsupported families changes, update
+`_MODELS_WITHOUT_TEMPERATURE` below — tests cover the detection.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +34,21 @@ from app.llm.provider import LLMProviderError, LLMRequest, LLMResponse, TokenUsa
 
 if TYPE_CHECKING:
     from openai import OpenAI
+
+# Model families that reject `temperature` in the Responses API.
+# Match prefixes against the canonical model id; case-insensitive.
+# Keep this list narrow and explicit — silent parameter drops are easy to
+# miss when debugging "why is my temperature being ignored?"
+_MODELS_WITHOUT_TEMPERATURE: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^gpt-5(\.|-|$)", re.IGNORECASE),  # gpt-5, gpt-5-pro, gpt-5.2-pro, etc.
+    re.compile(r"^o[1-9](-|$)", re.IGNORECASE),    # o1, o1-mini, o3, o3-mini, o4-mini, etc.
+)
+
+
+def _model_supports_temperature(model: str) -> bool:
+    """Return True iff `temperature` may be sent for this model."""
+
+    return not any(pattern.match(model) for pattern in _MODELS_WITHOUT_TEMPERATURE)
 
 
 class OpenAIResponsesProvider:
@@ -77,8 +105,9 @@ class OpenAIResponsesProvider:
                     "strict": True,
                 }
             },
-            "temperature": request.temperature,
         }
+        if _model_supports_temperature(self.model):
+            payload["temperature"] = request.temperature
         if request.max_output_tokens is not None:
             payload["max_output_tokens"] = request.max_output_tokens
 
