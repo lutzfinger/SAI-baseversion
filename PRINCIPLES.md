@@ -119,11 +119,49 @@ heartbeats. `~/Library/Logs/SAI/` for append-only logs.
 code-and-config-only. The boundary linter prevents committing anything
 state-shaped.
 
+#### 9. Operator-edit paths are channel-and-pattern locked
+
+The system MAY edit prompt files, rule lists, and policy files in
+response to operator instructions, BUT only under all five of the
+following conditions simultaneously:
+
+1. **Channel-bound.** The instruction arrives through the eval
+   channel (`#sai-eval` by default). Any other channel — DMs, other
+   public channels, email, the API — cannot trigger an edit.
+2. **Identity-bound.** The replying user_id matches the configured
+   operator (validated against `auth.test` once at startup, stored).
+   Replies from any other user_id are ignored, including replies that
+   appear to be impersonating the operator.
+3. **Pattern-bound.** The instruction matches a pre-registered safe
+   pattern (rule add, prompt-line edit, threshold tune). Free-form
+   "do whatever I say" instructions are not a registered pattern and
+   never apply.
+4. **Two-phase committed.** Stage one: the parser writes a proposal
+   file (`eval/proposed_*.yaml`) with the parsed change. Stage two:
+   a separate explicit `/sai-checkin` step applies the change to the
+   prompt or policy file, recomputes hashes, runs the regression
+   evaluator, and only commits if regression passes. Both stages
+   require positive operator action; neither is automatic.
+5. **Hash-aware.** After any operator-driven edit, the merged-runtime
+   manifest is regenerated and the hash-verifying loader picks up
+   the new content on next reload. Tampering is still detectable.
+
+This is a stricter version of #20 (Reflection may suggest, never
+auto-apply) tuned to the specific risk that Slack — by being the
+human-in-the-loop channel — could become a covert control plane
+if any of the five gates loosen.
+
+The system NEVER edits its own files based on:
+- Email content (always untrusted; principle #6).
+- Replies from unknown users or other channels.
+- LLM-generated patches that haven't passed Stage 2.
+- Patterns that aren't pre-registered.
+
 ---
 
 ### Eval & cascade
 
-#### 9. Eval-centric architecture
+#### 10. Eval-centric architecture
 
 The system's purpose is to grow a high-quality eval dataset. Every task
 input produces one append-only `EvalRecord` partitioned by `task_id`.
@@ -131,7 +169,7 @@ Tier predictions live in the record for audit but never count as ground
 truth. Cheaper tiers graduate when their precision/recall against
 ground-truth records clears the threshold and a human approves.
 
-#### 10. Reality-only ground truth
+#### 11. Reality-only ground truth
 
 Three legitimate sources of `ObservedReality`:
 
@@ -145,7 +183,7 @@ Three legitimate sources of `ObservedReality`:
 Models agreeing with each other is never ground truth. Even a unanimous
 cascade leaves `is_ground_truth=False` until reality confirms.
 
-#### 11. Cascade with early-stop, never parallel
+#### 12. Cascade with early-stop, never parallel
 
 Tasks list tiers cheapest → most expensive. The runner walks them in
 order; the first tier whose prediction is non-abstaining AND clears its
@@ -157,7 +195,7 @@ Never run all tiers on every input "just to compare." Comparison happens
 via deliberate, time-bounded `graduation_experiment` blocks at sample
 rates of 10–20%.
 
-#### 12. Pluggable Provider abstraction
+#### 13. Pluggable Provider abstraction
 
 A `Provider` is the single Protocol that wraps a vendor SDK call:
 `predict(LLMRequest) -> LLMResponse`. Switching from OpenAI to Anthropic,
@@ -168,7 +206,7 @@ Cost is the Provider's responsibility — it consults `cost_table.yaml`
 (USD per million tokens, per provider+model) and emits `cost_usd` in
 every response. Cost rolls up to per-task ROI dashboards automatically.
 
-#### 13. Pluggable factories everywhere
+#### 14. Pluggable factories everywhere
 
 The pattern repeats: when you need task-specific behavior on top of a
 universal mechanism, ship the mechanism as a factory in public; private
@@ -183,7 +221,7 @@ wires values into it. Examples:
 If you find yourself duplicating logic across two task implementations,
 extract to a public factory. The duplicated piece IS the framework.
 
-#### 14. Sample-rate experimentation
+#### 15. Sample-rate experimentation
 
 Comparing a candidate cheaper tier against the active tier doesn't run
 on 100% of inputs — that defeats the cost goal. `graduation_experiment`
@@ -195,7 +233,7 @@ After the window closes, the GraduationReviewer compares candidate
 predictions to ground truth and posts a Slack ask: "Promote? P/R numbers
 attached." Human approves; `active_tier_id` flips.
 
-#### 15. Co-work extracts, only approval applies
+#### 16. Co-work extracts, only approval applies
 
 Real-time human+SAI sessions ("co-work") may produce inferred preferences.
 These land as `Preference(strength=PROPOSED, source=COWORK)`. Runtime
@@ -210,7 +248,7 @@ approved. Preferences are never edited silently.
 
 ### Engineering discipline
 
-#### 16. Public ships mechanism. Private ships values.
+#### 17. Public ships mechanism. Private ships values.
 
 Mechanisms (validation, parsing, cascading, reconciling, persistence,
 verification) are open-source-ready public framework. Values (the actual
@@ -221,42 +259,42 @@ Test for the split: would you ship this file in an open-source starter
 to a stranger who's never seen the operator's data? If yes → public.
 If no → private. If you're not sure, it's private.
 
-#### 17. File-level override only in the public/private overlay
+#### 18. File-level override only in the public/private overlay
 
 The overlay merge writes both repos into one runtime tree, with private
 winning on path conflicts. **No deep YAML merging.** If private has
 `workflows/x.yaml`, it replaces public's `workflows/x.yaml` entirely.
 Per-key merging silently changes behavior; replacement is auditable.
 
-#### 18. Smallest correct scope
+#### 19. Smallest correct scope
 
 Every workflow lists the exact tools it can call. Adding a tool requires
 editing its policy file, which is a reviewable diff. Every connector
 gets the narrowest API scope it needs. Don't grant blanket capabilities
 "in case." Add specifically when needed.
 
-#### 19. Reflection may suggest, never auto-apply
+#### 20. Reflection may suggest, never auto-apply
 
 The system can propose prompt or policy improvements (and should). It
 **cannot apply them**. Application requires a human-driven check-in
 path with hash stamping and tests. Auto-applying changes from the same
 agent that observes their effect is the trust failure that ends careers.
 
-#### 20. No surface certifies its own deployment
+#### 21. No surface certifies its own deployment
 
 The surface that drafts a change is never the surface that approves it
 for production. Different roles, different tools, different sessions.
 This rule is what makes the audit trail mean something — the writer
 and the deployer are separated by intent.
 
-#### 21. Naming hygiene
+#### 22. Naming hygiene
 
 "SAI" is the framework. `sai-email` is a channel/workflow. `sai-run`
 is the bridge skill. `sai-eval` is the human-feedback channel. Don't
 collapse these. When you introduce a new namespace component, prefix it
 clearly and document it in this section's glossary.
 
-#### 22. Hash-verified loading, fail-closed
+#### 23. Hash-verified loading, fail-closed
 
 The overlay merge tool produces `.sai-overlay-manifest.json` (SHA-256
 of every merged file). The runtime verifier re-hashes on startup. Any
@@ -264,7 +302,7 @@ mismatch (tampering, accidental edit, missing file) fails the control
 plane before it can do anything. Three modes (`strict`, `warn`, `off`);
 production runs strict.
 
-#### 23. Boundary-linter enforced
+#### 24. Boundary-linter enforced
 
 A pre-commit hook + GitHub Actions check on the public repo catches
 real email addresses, personal names, `/Users/...` paths, real Slack
@@ -272,7 +310,7 @@ channels, phone numbers, and secret-scheme references (`op://`,
 `keychain://`). Per-file allowlist requires a comment justifying the
 exemption — no bare allowlist entries.
 
-#### 24. Big changes ship as a sequence
+#### 25. Big changes ship as a sequence
 
 Migrations, refactors, and feature additions ship as a sequence of
 focused commits with clear scope, not one mega-change. Each commit
@@ -284,7 +322,7 @@ tests + private factory + smoke + cutover, in order.
 
 ### Operations
 
-#### 25. Drop, don't delete
+#### 26. Drop, don't delete
 
 Skipped records stay in the audit log with `reason="..."`. Failed asks
 become predictions with `metadata.ask_failed=True`. Expired asks get
@@ -292,13 +330,13 @@ marked EXPIRED, never auto-deleted. Deprecated workflows get tagged
 deprecated and kept for ≥1 month before pruning. "Why didn't this
 train?" must be answerable from the JSONL log.
 
-#### 26. Hard ceilings, not queues
+#### 27. Hard ceilings, not queues
 
 Daily Slack-ask budgets are hard caps. When exceeded, the orchestrator
 skips with a recorded reason — never queues for tomorrow. Tomorrow's
 budget gets fresh priorities based on tomorrow's coverage state.
 
-#### 27. Fault-tolerant cascade
+#### 28. Fault-tolerant cascade
 
 A downstream service failure (Slack down, LLM API timeout, channel
 missing, Ollama unreachable, OAuth expired) becomes
@@ -306,7 +344,7 @@ missing, Ollama unreachable, OAuth expired) becomes
 continues per escalation policy. Runs never crash because something
 upstream is unreachable.
 
-#### 28. Confirmation + clarification for human asks
+#### 29. Confirmation + clarification for human asks
 
 When a human replies validly, post a confirmation reply in the same
 thread so they know it was received and applied. When the reply is
@@ -314,7 +352,7 @@ unrecognized, post a clarification listing valid options; the ask
 stays OPEN for the next attempt. Never silently process a reply, and
 never auto-act on a reply the parser couldn't validate.
 
-#### 29. Observability is built-in, not bolt-on
+#### 30. Observability is built-in, not bolt-on
 
 Tracing infrastructure (LangSmith or equivalent) ships in public; only
 API keys are private. Every cascade run, every Slack ask, every
@@ -322,7 +360,7 @@ reconciliation outcome is counted and visible. The framework is
 open-source-ready; the operator's specific traces are protected by the
 boundary linter (no real customer content in public traces).
 
-#### 30. Test before action; smoke before cutover
+#### 31. Test before action; smoke before cutover
 
 Every Tier impl, Provider, parser, and reconciler has unit tests. Every
 architectural component has integration tests exercising the narrative
