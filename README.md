@@ -11,6 +11,49 @@ The starter keeps a few core principles:
 - connector scopes stay narrow
 - write actions are explicit and reviewable
 
+## Quickstart with Docker (no Python or Ollama install needed)
+
+The fastest way to try SAI on a fresh machine is the included
+`docker-compose.yml`. It runs the control plane and Ollama as separate
+containers, networked together. You only need Docker installed.
+
+```sh
+git clone <this repo>
+cd SAI-baseversion
+make compose-up                # builds the SAI image, pulls Ollama, starts both
+make compose-pull-model        # pulls qwen2.5:7b into the Ollama container
+open http://localhost:8000     # control-plane dashboard
+```
+
+To stop:
+
+```sh
+make compose-down              # keeps named volumes (state, models)
+```
+
+To open a shell inside the running container for one-off scripts:
+
+```sh
+make compose-shell             # bash inside the sai container
+# inside: python -m scripts.<script_name>
+```
+
+Cloud LLM credentials and Slack tokens come in via your shell env or a
+`.env` file alongside `docker-compose.yml`. See `.env.example` for the
+full list. Operator overlay (private repo) integration is documented
+inline in `docker-compose.yml` — uncomment the volume mounts under the
+`sai` service and set `SAI_PRIVATE`.
+
+## Running directly on the host (faster development iteration)
+
+If you'd rather run on the host, ensure Python 3.12+ and Ollama are
+installed, then:
+
+```sh
+make install                   # editable install + dev extras
+make dev                       # uvicorn on http://localhost:8000
+```
+
 ## Included Workflows
 
 1. `newsletter-identification-gmail`

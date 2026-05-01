@@ -1,0 +1,102 @@
+# SAI control plane — single-host docker-compose.
+#
+# Two services:
+#
+#   ollama  — the local LLM runtime. Pulls models on demand; persists
+#             them in a named volume so they survive `docker compose
+#             down`. Exposes port 11434 to the SAI container only.
+#
+#   sai     — the control plane (FastAPI on :8000) and a bash entry
+#             you can `exec` into for one-off scripts (sai-overlay,
+#             quality_check_email_classifier, etc.). Depends on
+#             ollama being healthy.
+#
+# Quickstart on a fresh machine:
+#
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5:7b
+#   open http://localhost:8000
+#
+# Stop with:
+#
+#   docker compose down            # keeps volumes (state/models)
+#   docker compose down --volumes  # also wipes named volumes (full reset)
+#
+# To add an operator's private overlay, mount a host directory and set
+# SAI_PRIVATE in the sai service's environment (commented example below).
+
+services:
+  ollama:
+    # Official upstream image. Updates published frequently — pin a
+    # version in production. Latest tag works for development.
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    # No host port published. Only accessible inside the docker network
+    # via `http://ollama:11434`. If you want to use this Ollama instance
+    # from the host directly, uncomment the ports stanza:
+    # ports:
+    #   - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    # GPU access on Linux: uncomment and ensure nvidia-container-toolkit
+    # is installed. On macOS, Ollama runs CPU-only inside Docker today;
+    # for GPU on Mac, run Ollama on the host instead and remove this
+    # service.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  sai:
+    build:
+      context: .
+    image: sai-control-plane:latest
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # Inside the docker network, ollama is reachable by service name.
+      SAI_LOCAL_LLM_HOST: http://ollama:11434
+      SAI_LOCAL_LLM_MODEL: ${SAI_LOCAL_LLM_MODEL:-qwen2.5:7b}
+      SAI_STATE_DIR: /state
+      SAI_LOGS_DIR: /logs
+      SAI_TOKENS_DIR: /tokens
+      # Cloud LLM credentials — pass through from the host. The bare
+      # image has no credentials baked in. You either set these in a
+      # `.env` file alongside this compose file, or via your shell.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SAI_SLACK_BOT_TOKEN: ${SAI_SLACK_BOT_TOKEN:-}
+      SAI_SLACK_APP_TOKEN: ${SAI_SLACK_APP_TOKEN:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persistent state outside the container. By default these map
+      # to local named volumes; for production you'd map them to host
+      # paths so the operator can back them up + read JSONL audit logs
+      # with their normal tooling.
+      - sai_state:/state
+      - sai_logs:/logs
+      - sai_tokens:/tokens
+      # ─── Operator overlay (uncomment to enable) ─────────────────────
+      # Mount the operator's private SAI repo and runtime config so the
+      # merged tree builder can find them. Container then runs
+      # `sai-overlay merge` on startup and uses the merged tree.
+      #
+      # - ${SAI_PRIVATE:-../SAI}:/private:ro
+      # - ${HOME}/.config/sai:/runtime-config:ro
+
+volumes:
+  ollama_models:    # downloaded LLM weights; survives `down`, wiped by `down --volumes`
+  sai_state:        # SQLite DBs, eval records (per principle #8)
+  sai_logs:         # append-only JSONL audit logs
+  sai_tokens:       # OAuth tokens for connectors
