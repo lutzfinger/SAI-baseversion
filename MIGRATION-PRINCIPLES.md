@@ -1,6 +1,6 @@
 # SAI migration: cycle plan + principles
 
-**Date stamp:** 2026-05-01 (v3 — issues 1–3 fixed; system ready for side-by-side)
+**Date stamp:** 2026-05-01 (v4 — issues fixed, cutover staged, slack_joke migrated)
 **Replaces:** `~/Downloads/SAI-PLAN (1).md` (the original handoff plan, 2026-04-27)
 **Read alongside:** `PRINCIPLES.md` (the durable rules)
 

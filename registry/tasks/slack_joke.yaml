@@ -1,0 +1,42 @@
+# Worked example: slack_joke Task config.
+#
+# Public template. Copy to your private overlay at the same path and tune
+# the channel name, model, etc. The TaskFactory at
+# app/tasks/slack_joke.py wires the prompt template + Slack delivery.
+#
+# Loaded by app.runtime.ai_stack.task.TaskConfig.from_yaml.
+task_id: slack_joke
+description: >
+  One-shot safe-for-work joke generation for a Slack DM request. Rules
+  tier short-circuits with a canned joke when the request matches a known
+  topic keyword (cheap, deterministic). Cloud LLM tier handles novel
+  requests. No human tier — humour doesn't have ground truth to label,
+  and the canned fallback is always safe. Escalation policy is
+  USE_ACTIVE: cloud's output (or rules' if it resolved) is applied even
+  when cloud abstains. The worst case is the canned fallback joke from
+  the rules tier, which is by design.
+
+input_schema_class: app.tasks.slack_joke_io.JokeRequest
+output_schema_class: app.tasks.slack_joke_io.JokeResponse
+
+# Cloud is the active ceiling. Rules tier resolves common topic-keyword
+# matches with the canned fallback at high confidence.
+active_tier_id: cloud_llm
+
+escalation_policy: use_active
+reality_observation_window_days: 7
+
+graduation_thresholds:
+  rules:
+    precision: 0.95
+    recall: 0.30          # rules only cover the keyword cases; recall is bounded
+  cloud_llm:
+    precision: 0.90
+    recall: 0.95
+
+metadata:
+  prompt_id: example_slack_joke
+  notes: >
+    Rules tier here is a deterministic-fallback dispatcher (canned jokes
+    by topic keyword). It's NOT trying to learn — it's a safety net for
+    when cloud is unavailable or low-confidence. Treat it as the floor.
