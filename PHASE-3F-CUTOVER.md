@@ -92,11 +92,11 @@ Edit `~/Library/LaunchAgents/com.sai.tag-new-inbox.plist`:
 
 ```xml
 <key>WorkingDirectory</key>
-<string>/Users/lfinger/.sai-runtime</string>     <!-- was $SAI_PRIVATE -->
+<string>/Users/example/.sai-runtime</string>     <!-- was $SAI_PRIVATE -->
 
 <key>ProgramArguments</key>
 <array>
-    <string>/Users/lfinger/.sai-runtime/scripts/run_tag_new_inbox.sh</string>
+    <string>/Users/example/.sai-runtime/scripts/run_tag_new_inbox.sh</string>
 </array>
 ```
 
