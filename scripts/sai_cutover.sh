@@ -46,6 +46,38 @@ build_runtime() {
     say "verifying $RUNTIME"
     "$SAI_OVERLAY" verify --runtime "$RUNTIME" || fail "verify failed (manifest mismatch)"
     say "build ok: $(find "$RUNTIME" -type f | wc -l | tr -d ' ') files, $(du -sh "$RUNTIME" | cut -f1)"
+
+    link_venv
+}
+
+# Symlink the operator's venv into the merged tree so launchd-driven shell
+# scripts (run_tag_new_inbox_scheduled.sh, etc.) that compute
+# PYTHON_BIN="$REPO_ROOT/.venv/bin/python" find the right interpreter
+# without needing per-script env-var plumbing. The symlink is created AFTER
+# manifest verification (it's not in the manifest) and points at private's
+# .venv where all the operator's dependencies are already installed.
+#
+# A no-op when private's venv is missing — the smoke test will catch the
+# missing venv with a clear error rather than us preempting it here.
+link_venv() {
+    PRIVATE_VENV="$PRIVATE/.venv"
+    LINK_TARGET="$RUNTIME/.venv"
+    if [ ! -d "$PRIVATE_VENV" ]; then
+        say "note: private venv missing at $PRIVATE_VENV; skipping .venv symlink"
+        return
+    fi
+    if [ -L "$LINK_TARGET" ]; then
+        existing=$(readlink "$LINK_TARGET")
+        if [ "$existing" = "$PRIVATE_VENV" ]; then
+            say ".venv symlink already correct: $LINK_TARGET → $PRIVATE_VENV"
+            return
+        fi
+        rm "$LINK_TARGET"
+    elif [ -e "$LINK_TARGET" ]; then
+        fail "$LINK_TARGET exists and is not a symlink; refusing to clobber"
+    fi
+    ln -s "$PRIVATE_VENV" "$LINK_TARGET"
+    say "linked .venv: $LINK_TARGET → $PRIVATE_VENV"
 }
 
 unload_launchd() {
