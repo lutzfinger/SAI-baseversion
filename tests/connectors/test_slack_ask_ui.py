@@ -71,15 +71,21 @@ def test_post_ask_calls_slack_with_blocks(store: AskStore) -> None:
     assert call["channel"] == "#example"
     assert "blocks" in call
     blocks = call["blocks"]
-    # header + input + prior_predictions + body
+    # header + input + top_prediction + body
     assert len(blocks) == 4
     assert blocks[0]["type"] == "header"
+    top_prediction_text = blocks[2]["text"]["text"]
+    assert "Top prediction:" in top_prediction_text
+    assert "cloud_llm" in top_prediction_text  # the highest-confidence non-abstain
+    assert "0.62" in top_prediction_text
     body_text = blocks[3]["text"]["text"]
     assert "Right call?" in body_text
     assert "_Reply in this thread to answer._" in body_text
 
 
-def test_post_ask_omits_prior_predictions_block_when_empty(store: AskStore) -> None:
+def test_post_ask_omits_top_prediction_block_when_no_predictions(
+    store: AskStore,
+) -> None:
     client = _StubWebClient()
     ui = SlackAskUI(client=client, channel="#example", ask_store=store)
 
@@ -88,7 +94,78 @@ def test_post_ask_omits_prior_predictions_block_when_empty(store: AskStore) -> N
         input_data={"booking_id": "abc"},
     )
     [call] = client.calls
-    assert len(call["blocks"]) == 3  # header + input + body (no prior_predictions block)
+    assert len(call["blocks"]) == 3  # header + input + body (no top-prediction block)
+
+
+def test_post_ask_email_input_renders_labeled_fields(store: AskStore) -> None:
+    """Email-shaped inputs render with From / To / Subject / Summary fields,
+    not as a JSON dump."""
+
+    client = _StubWebClient()
+    ui = SlackAskUI(client=client, channel="#example", ask_store=store)
+
+    ui.post_ask(
+        task_id="email_classification",
+        input_data={
+            "from_email": "alice@somecompany.example",
+            "from_name": "Alice Example",
+            "to": ["you@example.com"],
+            "subject": "Following up on our customer call",
+            "snippet": "Hi, just checking in on the next steps from yesterday's call.",
+        },
+        question_text="Which bucket?",
+    )
+    [call] = client.calls
+    input_block = call["blocks"][1]["text"]["text"]
+    assert "*Email:*" in input_block
+    assert "*From:*" in input_block
+    assert "Alice Example" in input_block
+    assert "alice@somecompany.example" in input_block
+    assert "*To:*" in input_block
+    assert "you@example.com" in input_block
+    assert "*Subject:*" in input_block
+    assert "Following up on our customer call" in input_block
+    assert "*Summary:*" in input_block
+    assert "checking in on the next steps" in input_block
+    # Definitely NOT the old JSON-dump format
+    assert "```" not in input_block
+
+
+def test_post_ask_truncates_email_summary_to_150_chars(store: AskStore) -> None:
+    client = _StubWebClient()
+    ui = SlackAskUI(client=client, channel="#example", ask_store=store)
+    long_body = "x " * 200  # 400 chars
+
+    ui.post_ask(
+        task_id="email_classification",
+        input_data={
+            "from_email": "alice@somecompany.example",
+            "subject": "Long body",
+            "body_excerpt": long_body,
+        },
+    )
+    [call] = client.calls
+    input_block = call["blocks"][1]["text"]["text"]
+    summary_line = next(
+        line for line in input_block.split("\n") if line.startswith("• *Summary:*")
+    )
+    body_part = summary_line.split("• *Summary:* ", 1)[1]
+    assert len(body_part) <= 151  # 150 + "…"
+    assert body_part.endswith("…")
+
+
+def test_post_ask_non_email_input_falls_back_to_json(store: AskStore) -> None:
+    client = _StubWebClient()
+    ui = SlackAskUI(client=client, channel="#example", ask_store=store)
+    ui.post_ask(
+        task_id="travel",
+        input_data={"booking_id": "abc", "destination": "MUC"},
+    )
+    [call] = client.calls
+    input_block = call["blocks"][1]["text"]["text"]
+    assert "*Input:*" in input_block
+    assert "```" in input_block
+    assert "booking_id" in input_block
 
 
 def test_post_ask_includes_options_in_body(store: AskStore) -> None:

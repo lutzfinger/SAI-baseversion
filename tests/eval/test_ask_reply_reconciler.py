@@ -55,12 +55,17 @@ class _StubWebClient:
         self._replies = replies or []
         self._raise = raise_exc
         self.calls: list[dict[str, Any]] = []
+        self.posted_messages: list[dict[str, Any]] = []
 
     def conversations_replies(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         if self._raise is not None:
             raise self._raise
         return {"messages": self._replies}
+
+    def chat_postMessage(self, **kwargs: Any) -> dict[str, Any]:
+        self.posted_messages.append(kwargs)
+        return {"ok": True, "ts": "1111111113.000100"}
 
 
 @pytest.fixture
@@ -98,11 +103,11 @@ def test_polling_marks_ask_answered_and_propagates_to_records(
         clock=_now,
     )
     counts = reconciler.poll_open_asks()
-    assert counts == {"answered": 1, "still_open": 0, "expired": 0}
+    assert counts == {"answered": 1, "still_open": 0, "expired": 0, "clarified": 0}
 
     latest_state = ask_store.latest_state("email_classification")
     assert latest_state["ask-1"].status == AskStatus.ANSWERED
-    assert latest_state["ask-1"].answer == {"text": "friends"}
+    assert latest_state["ask-1"].answer == {"text": "friends", "valid": True}
     assert latest_state["ask-1"].answered_by == "U_LUTZ"
 
     # Linked record propagated to ground truth via SLACK_ASK
@@ -112,7 +117,7 @@ def test_polling_marks_ask_answered_and_propagates_to_records(
     assert latest.reality_status == RealityStatus.ANSWERED
     assert latest.reality is not None
     assert latest.reality.source == RealitySource.SLACK_ASK
-    assert latest.reality.label == {"text": "friends"}
+    assert latest.reality.label == {"text": "friends", "valid": True}
 
 
 def test_polling_keeps_open_when_no_human_reply(
@@ -137,7 +142,7 @@ def test_polling_keeps_open_when_no_human_reply(
         clock=_now,
     )
     counts = reconciler.poll_open_asks()
-    assert counts == {"answered": 0, "still_open": 1, "expired": 0}
+    assert counts == {"answered": 0, "still_open": 1, "expired": 0, "clarified": 0}
     assert ask_store.latest_state("email_classification")["ask-1"].status == AskStatus.OPEN
 
 
@@ -159,7 +164,7 @@ def test_polling_marks_expired_when_window_passed(
         clock=_now,
     )
     counts = reconciler.poll_open_asks()
-    assert counts == {"answered": 0, "still_open": 0, "expired": 1}
+    assert counts == {"answered": 0, "still_open": 0, "expired": 1, "clarified": 0}
     assert client.calls == []  # didn't poll Slack for expired
     assert (
         ask_store.latest_state("email_classification")["ask-1"].status
@@ -184,7 +189,7 @@ def test_polling_tolerates_slack_errors(
     )
     counts = reconciler.poll_open_asks()
     # Stays open — we'll retry next poll.
-    assert counts == {"answered": 0, "still_open": 1, "expired": 0}
+    assert counts == {"answered": 0, "still_open": 1, "expired": 0, "clarified": 0}
 
 
 def test_reconcile_one_returns_observed_when_ask_answered(
@@ -237,3 +242,99 @@ def test_reconcile_one_still_pending_without_ask_id(
     )
     result = reconciler.reconcile_one(record)
     assert result.outcome == ReconciliationOutcome.STILL_PENDING
+
+
+def test_polling_posts_confirmation_reply_in_thread(
+    stores: tuple[AskStore, EvalRecordStore],
+) -> None:
+    """When a valid answer lands, the reconciler posts a confirmation reply
+    so the human knows it was received and applied."""
+
+    ask_store, eval_store = stores
+    record = _make_record(record_id="r-1")
+    record.ask_id = "ask-conf"
+    eval_store.append(record)
+    ask_store.append(
+        _make_open_ask(
+            ask_id="ask-conf", record_ids=["r-1"], expires_in=timedelta(days=1)
+        )
+    )
+
+    client = _StubWebClient(
+        replies=[
+            {"user": "BOT", "text": "needs input"},
+            {"user": "U_LUTZ", "text": "personal"},
+        ]
+    )
+    reconciler = AskReplyReconciler(
+        task_id="email_classification",
+        client=client,
+        ask_store=ask_store,
+        eval_store=eval_store,
+        bot_user_id="BOT",
+        clock=_now,
+    )
+    counts = reconciler.poll_open_asks()
+    assert counts["answered"] == 1
+    assert len(client.posted_messages) == 1
+    posted = client.posted_messages[0]
+    assert posted["channel"] == "#example"
+    assert posted["thread_ts"] == "1111111111.000100"
+    assert ":white_check_mark:" in posted["text"]
+    assert "Got it" in posted["text"]
+    assert "personal" in posted["text"]
+
+
+def test_polling_posts_clarification_when_answer_is_invalid(
+    stores: tuple[AskStore, EvalRecordStore],
+) -> None:
+    """When the parser flags the answer as invalid, the reconciler posts a
+    clarification reply listing valid options and leaves the ask OPEN."""
+
+    ask_store, eval_store = stores
+    ask_store.append(
+        _make_open_ask(
+            ask_id="ask-bad", record_ids=[], expires_in=timedelta(days=1)
+        )
+    )
+
+    def _strict_parser(text: str) -> dict[str, Any]:
+        valid_options = ["customers", "personal", "newsletters"]
+        normalized = text.strip().lower()
+        if normalized in valid_options:
+            return {"level1_classification": normalized, "valid": True}
+        return {
+            "text": text.strip(),
+            "valid": False,
+            "expected_options": valid_options,
+        }
+
+    client = _StubWebClient(
+        replies=[
+            {"user": "BOT", "text": "needs input"},
+            {"user": "U_LUTZ", "text": "no idea"},
+        ]
+    )
+    reconciler = AskReplyReconciler(
+        task_id="email_classification",
+        client=client,
+        ask_store=ask_store,
+        eval_store=eval_store,
+        bot_user_id="BOT",
+        reply_parser=_strict_parser,
+        clock=_now,
+    )
+    counts = reconciler.poll_open_asks()
+    assert counts["clarified"] == 1
+    assert counts["still_open"] == 1
+    assert counts["answered"] == 0
+    [posted] = client.posted_messages
+    assert ":grey_question:" in posted["text"]
+    assert "no idea" in posted["text"]
+    assert "customers" in posted["text"]
+    assert "personal" in posted["text"]
+    # Ask stays OPEN
+    assert (
+        ask_store.latest_state("email_classification")["ask-bad"].status
+        == AskStatus.OPEN
+    )

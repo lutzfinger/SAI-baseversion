@@ -288,7 +288,7 @@ def test_slack_reply_reconciles_record_to_ground_truth(
     assert latest.reality_status == RealityStatus.ANSWERED
     assert latest.reality is not None
     assert latest.reality.source == RealitySource.SLACK_ASK
-    assert latest.reality.label == {"text": "friends"}
+    assert latest.reality.label == {"text": "friends", "valid": True}
 
 
 def test_gmail_relabel_reconciles_record_to_human_label(
@@ -448,7 +448,7 @@ def test_full_pipeline_one_input_to_ground_truth(
     assert latest.is_ground_truth is True
     assert latest.reality_status == RealityStatus.ANSWERED
     assert latest.reality is not None
-    assert latest.reality.label == {"text": "personal"}
+    assert latest.reality.label == {"text": "personal", "valid": True}
 
     [ask] = ask_store.latest_state(config.task_id).values()
     assert ask.status == AskStatus.ANSWERED
