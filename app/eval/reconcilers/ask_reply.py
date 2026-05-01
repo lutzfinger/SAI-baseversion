@@ -5,10 +5,16 @@ Walks open Asks for a task, polls each ask's Slack thread for replies, and:
   1. Marks the Ask as ANSWERED with the parsed answer.
   2. For each linked EvalRecord, sets `reality` (source=SLACK_ASK) and
      `is_ground_truth=True` via `record_reality()`.
+  3. Posts a confirmation reply in the thread so the human knows their
+     answer was received and applied.
+  4. If the parser flags the answer as invalid (`valid=false`), posts a
+     clarification reply ("didn't recognize X, try one of: ...") and
+     leaves the ask OPEN so the next reply gets another shot.
 
-The reply parser is pluggable: the default extracts the first non-bot reply
-text and stores it as `{"text": "..."}`. Tasks with structured options can
-inject a parser that recognizes "yes/no/edit" or option-name matching.
+The reply parser is pluggable. The default extracts the raw text and is
+permissive (always valid). Task-specific parsers (e.g. the L1-aware one
+for email_classification) validate against expected options and set
+`valid=False` when the answer doesn't match.
 
 The Slack reply polling assumes the conversations.replies API. The bot user
 id is filtered out so the bot's own followups don't count as the answer.
@@ -17,6 +23,7 @@ id is filtered out so the bot's own followups don't count as the answer.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -35,9 +42,25 @@ ReplyParser = Callable[[str], dict[str, Any]]
 
 
 def default_reply_parser(text: str) -> dict[str, Any]:
-    """Default parser: capture the raw reply text. Tasks can override."""
+    """Default parser: capture the raw reply text. Always valid (permissive)."""
 
-    return {"text": text.strip()}
+    return {"text": text.strip(), "valid": True}
+
+
+def _summarize_answer(answer: dict[str, Any]) -> str:
+    """One-line human-readable rendering of a parsed answer for confirmation."""
+
+    if not isinstance(answer, dict):
+        return f"answer: `{answer}`"
+    parts: list[str] = []
+    for key in ("level1_classification", "level2_intent", "label", "text"):
+        value = answer.get(key)
+        if value:
+            parts.append(f"{key.split('_')[0]}=`{value}`")
+            break  # show the first meaningful field; full detail in record
+    if not parts:
+        parts.append(f"`{answer}`")
+    return " ".join(parts)
 
 
 class AskReplyReconciler:
@@ -65,11 +88,21 @@ class AskReplyReconciler:
     def poll_open_asks(self) -> dict[str, int]:
         """Poll Slack for replies on every open Ask. Update Asks + linked records.
 
-        Returns a count summary: {"answered": N, "still_open": M, "expired": K}.
+        On valid answers, marks the Ask ANSWERED, propagates ground truth to
+        linked records, and posts a confirmation reply in the thread.
+        On invalid answers (parser sets `valid=False`), posts a clarification
+        reply and leaves the Ask OPEN.
+
+        Returns: {"answered": N, "still_open": M, "expired": K, "clarified": C}
         """
 
-        counts = {"answered": 0, "still_open": 0, "expired": 0}
+        counts = {"answered": 0, "still_open": 0, "expired": 0, "clarified": 0}
         now = self._clock()
+        # Track which thread_ts we already wrote a clarification into THIS run,
+        # so a single human reply that's invalid doesn't get clarified twice
+        # if poll_open_asks is called repeatedly within the same minute.
+        clarified_threads_this_run: set[str] = set()
+
         for ask in self.ask_store.open_asks(self.task_id):
             if ask.expires_at is not None and now > ask.expires_at:
                 expired = ask.model_copy(
@@ -87,18 +120,69 @@ class AskReplyReconciler:
                 counts["still_open"] += 1
                 continue
 
+            parsed = answer["parsed"]
+            valid = parsed.get("valid", True)
+
+            if not valid:
+                thread = ask.posted_to_thread_ts or ""
+                if thread and thread not in clarified_threads_this_run:
+                    self._post_clarification(ask, parsed=parsed)
+                    clarified_threads_this_run.add(thread)
+                counts["clarified"] += 1
+                counts["still_open"] += 1
+                continue
+
             answered = ask.model_copy(
                 update={
                     "status": AskStatus.ANSWERED,
                     "answered_at": now,
                     "answered_by": answer.get("user"),
-                    "answer": answer["parsed"],
+                    "answer": parsed,
                 }
             )
             self.ask_store.append(answered)
             self._propagate_to_records(answered, observed_at=now)
+            self._post_confirmation(answered)
             counts["answered"] += 1
         return counts
+
+    def _post_confirmation(self, ask: Ask) -> None:
+        """Post a `Got it: ...` reply in the ask's thread."""
+
+        if not ask.posted_to_thread_ts or ask.answer is None:
+            return
+        summary = _summarize_answer(ask.answer)
+        text = (
+            f":white_check_mark: Got it — {summary}. "
+            f"EvalRecord(s) updated."
+        )
+        with suppress(Exception):  # pragma: no cover - any post failure is non-fatal
+            self.client.chat_postMessage(
+                channel=ask.posted_to_channel,
+                thread_ts=ask.posted_to_thread_ts,
+                text=text,
+            )
+
+    def _post_clarification(self, ask: Ask, *, parsed: dict[str, Any]) -> None:
+        """Post a `didn't recognize X, try one of: ...` reply in the thread."""
+
+        if not ask.posted_to_thread_ts:
+            return
+        offered = parsed.get("text") or parsed.get("raw") or "(no text)"
+        options = parsed.get("expected_options") or ask.options or []
+        options_part = ""
+        if options:
+            options_part = " Try one of: " + ", ".join(f"`{o}`" for o in options[:12])
+        text = (
+            f":grey_question: I didn't recognize `{offered}` as a valid answer."
+            f"{options_part}"
+        )
+        with suppress(Exception):  # pragma: no cover - any post failure is non-fatal
+            self.client.chat_postMessage(
+                channel=ask.posted_to_channel,
+                thread_ts=ask.posted_to_thread_ts,
+                text=text,
+            )
 
     # The Protocol-compatible per-record entry point. AskReplyReconciler is
     # used by RealityReconciliationRunner only for the SLACK_ASK case where

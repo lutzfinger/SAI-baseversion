@@ -117,8 +117,9 @@ def _build_blocks(
 
     Layout:
       header              — "[task_id] needs input"
-      section (markdown)  — input summary
-      section (markdown)  — prior predictions (if any)
+      section (markdown)  — pretty-formatted input summary
+                             (email-aware when input has from_email/subject)
+      section (markdown)  — top tier prediction (one-liner) if any
       section (markdown)  — the question + options + reply instruction
     """
 
@@ -134,27 +135,21 @@ def _build_blocks(
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Input:*\n```{_summarize_input(input_data)}```",
+                "text": _format_input_section(input_data),
             },
         },
     ]
-    if prior_predictions:
+    top_prediction = _format_top_prediction(prior_predictions)
+    if top_prediction:
         blocks.append(
             {
                 "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "*Prior tier predictions:*\n```"
-                        + _summarize_predictions(prior_predictions)
-                        + "```"
-                    ),
-                },
+                "text": {"type": "mrkdwn", "text": top_prediction},
             }
         )
     body = f"*Question:* {question}"
     if options:
-        body += "\n\n*Options:*\n" + "\n".join(f"• `{o}`" for o in options)
+        body += "\n\n*Options:* " + " ".join(f"`{o}`" for o in options)
     body += "\n\n_Reply in this thread to answer._"
     blocks.append(
         {
@@ -163,6 +158,63 @@ def _build_blocks(
         }
     )
     return blocks
+
+
+def _format_input_section(input_data: dict[str, Any]) -> str:
+    """Pretty-print an input. Detects email shape and renders human-readable.
+
+    Email shape: input_data has any of from_email / subject / snippet.
+    Renders as labeled fields (From, To, Subject, Summary). Truncates
+    body excerpt to 150 chars by default.
+
+    Other shapes fall back to compact JSON, capped at 800 chars.
+    """
+
+    if _looks_like_email(input_data):
+        return _format_email_input(input_data)
+    return f"*Input:*\n```{_summarize_input(input_data)}```"
+
+
+def _looks_like_email(input_data: dict[str, Any]) -> bool:
+    return (
+        "from_email" in input_data
+        or "subject" in input_data
+        or "snippet" in input_data
+    )
+
+
+def _format_email_input(input_data: dict[str, Any], *, summary_chars: int = 150) -> str:
+    """Render an email payload as labeled markdown fields."""
+
+    from_email = str(input_data.get("from_email") or "—")
+    from_name = input_data.get("from_name")
+    from_label = f"{from_name} <{from_email}>" if from_name else from_email
+    to = input_data.get("to") or []
+    if isinstance(to, list) and to:
+        to_label = ", ".join(str(addr) for addr in to[:3])
+        if len(to) > 3:
+            to_label += f" (+{len(to) - 3} more)"
+    else:
+        to_label = "—"
+    subject = str(input_data.get("subject") or "(no subject)")
+    body = (
+        input_data.get("body_excerpt")
+        or input_data.get("snippet")
+        or input_data.get("body")
+        or ""
+    )
+    body = str(body).strip()
+    if len(body) > summary_chars:
+        body = body[: summary_chars - 1].rstrip() + "…"
+
+    lines = [
+        "*Email:*",
+        f"• *From:* {from_label}",
+        f"• *To:* {to_label}",
+        f"• *Subject:* {subject}",
+        f"• *Summary:* {body}" if body else "• *Summary:* (empty)",
+    ]
+    return "\n".join(lines)
 
 
 def _summarize_input(input_data: dict[str, Any], *, max_chars: int = 800) -> str:
@@ -174,12 +226,33 @@ def _summarize_input(input_data: dict[str, Any], *, max_chars: int = 800) -> str
     return serialized
 
 
-def _summarize_predictions(
-    prior_predictions: dict[str, Any], *, max_chars: int = 600
-) -> str:
-    """Short, deterministic summary of tier predictions for display."""
+def _format_top_prediction(prior_predictions: dict[str, Any]) -> str:
+    """Render the highest-confidence tier prediction as a one-liner.
 
-    serialized = json.dumps(prior_predictions, indent=2, default=str, sort_keys=True)
-    if len(serialized) > max_chars:
-        return serialized[: max_chars - 4] + "\n…"
-    return serialized
+    Avoids the JSON wall the prior layout produced. If multiple tiers ran,
+    the human only needs to see the one closest to a decision; the full
+    detail lives in the EvalRecord for audit.
+    """
+
+    if not prior_predictions:
+        return ""
+    ranked: list[tuple[float, str, dict[str, Any]]] = []
+    for tier_id, pred in prior_predictions.items():
+        if not isinstance(pred, dict):
+            continue
+        if pred.get("abstained", False):
+            continue
+        confidence = float(pred.get("confidence", 0.0) or 0.0)
+        ranked.append((confidence, tier_id, pred))
+    if not ranked:
+        return "_No tier produced a confident answer._"
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    confidence, tier_id, pred = ranked[0]
+    output = pred.get("output", {})
+    label_parts: list[str] = []
+    for key in ("level1_classification", "label", "level2_intent"):
+        value = output.get(key) if isinstance(output, dict) else None
+        if value:
+            label_parts.append(f"{key.split('_')[0]}=`{value}`")
+    label_text = " ".join(label_parts) if label_parts else "(no labeled output)"
+    return f"*Top prediction:* `{tier_id}` says {label_text} (confidence {confidence:.2f})"
