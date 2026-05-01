@@ -58,7 +58,7 @@ instead of in production.
 ### Step 4 — Decide and act on proposals
 
 The script prints proposed rule additions but does NOT auto-apply.
-PRINCIPLES #20 — reflection may suggest, never auto-apply. The reader
+per the principle that reflection may suggest, never auto-apply. The reader
 reviews each proposal against the doc and decides.
 
 Reject proposals that:
@@ -74,7 +74,8 @@ gate; tests are the verification that the gate works.
 
 ### Step 6 — Commit + write phase report
 
-Public + private commit separately (PRINCIPLES #25). Each commit message
+Public + private commit separately (per the principle that big changes
+ship as a sequence). Each commit message
 quotes the doc section that justifies the change and cites the QA-report
 SHA256 (proof QA ran).
 

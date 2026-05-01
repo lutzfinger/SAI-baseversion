@@ -310,7 +310,46 @@ channels, phone numbers, and secret-scheme references (`op://`,
 `keychain://`). Per-file allowlist requires a comment justifying the
 exemption — no bare allowlist entries.
 
-#### 25. Big changes ship as a sequence
+#### 25. Standard libraries before custom code
+
+**Before building infrastructure, check if a standard library covers
+80% of the use case.** Slack integration, HTTP retry, scheduling,
+queues, secret stores, LLM provider abstractions, YAML editing — all
+of these have mature libraries with thousands of users who have
+already found and fixed the edge cases.
+
+The check, before writing more than ~50 lines of new infrastructure:
+*would a stranger reading this file think "wait, why didn't they just
+use X?"* If yes — use X.
+
+Custom infrastructure accumulates hidden bugs (silent error swallows,
+de-duplication gaps, format mishandling, concurrency races) that
+libraries handle by default. A 600-line custom Slack polling daemon
+shipped 7 bugs in 2 hours; the same task in `slack-bolt` is 30 lines
+of handler code with zero of those bug classes possible.
+
+**Two legitimate exceptions:**
+
+1. **Tiny + well-understood**: when the surface area is small, the
+   semantics are clear, and the library brings excess scope. Example:
+   `hashlib.sha256` over a manifest is 30 lines and exact-fit; a
+   "manifest verification framework" library would be over-engineered.
+
+2. **Public/private boundary requires it**: when our framework's
+   abstraction has operator-specific extension points the library
+   doesn't model. Example: `Provider` Protocol exposes per-provider
+   cost tables and per-tier confidence thresholds; we may *back* it
+   with a library like LiteLLM but the abstraction stays ours.
+
+**When you build custom anyway, document the rationale in the file's
+docstring**: a "Why not <library>:" paragraph that names the trade-off.
+Otherwise the next session will re-litigate the decision.
+
+When this principle is violated, the cost compounds: each new feature
+on top of custom infrastructure is more expensive to build and more
+likely to expose another lurking bug. Refactor before you add.
+
+#### 26. Big changes ship as a sequence
 
 Migrations, refactors, and feature additions ship as a sequence of
 focused commits with clear scope, not one mega-change. Each commit
@@ -322,7 +361,7 @@ tests + private factory + smoke + cutover, in order.
 
 ### Operations
 
-#### 26. Drop, don't delete
+#### 27. Drop, don't delete
 
 Skipped records stay in the audit log with `reason="..."`. Failed asks
 become predictions with `metadata.ask_failed=True`. Expired asks get
@@ -330,13 +369,13 @@ marked EXPIRED, never auto-deleted. Deprecated workflows get tagged
 deprecated and kept for ≥1 month before pruning. "Why didn't this
 train?" must be answerable from the JSONL log.
 
-#### 27. Hard ceilings, not queues
+#### 28. Hard ceilings, not queues
 
 Daily Slack-ask budgets are hard caps. When exceeded, the orchestrator
 skips with a recorded reason — never queues for tomorrow. Tomorrow's
 budget gets fresh priorities based on tomorrow's coverage state.
 
-#### 28. Fault-tolerant cascade
+#### 29. Fault-tolerant cascade
 
 A downstream service failure (Slack down, LLM API timeout, channel
 missing, Ollama unreachable, OAuth expired) becomes
@@ -344,7 +383,7 @@ missing, Ollama unreachable, OAuth expired) becomes
 continues per escalation policy. Runs never crash because something
 upstream is unreachable.
 
-#### 29. Confirmation + clarification for human asks
+#### 30. Confirmation + clarification for human asks
 
 When a human replies validly, post a confirmation reply in the same
 thread so they know it was received and applied. When the reply is
@@ -352,7 +391,7 @@ unrecognized, post a clarification listing valid options; the ask
 stays OPEN for the next attempt. Never silently process a reply, and
 never auto-act on a reply the parser couldn't validate.
 
-#### 30. Observability is built-in, not bolt-on
+#### 31. Observability is built-in, not bolt-on
 
 Tracing infrastructure (LangSmith or equivalent) ships in public; only
 API keys are private. Every cascade run, every Slack ask, every
@@ -360,7 +399,7 @@ reconciliation outcome is counted and visible. The framework is
 open-source-ready; the operator's specific traces are protected by the
 boundary linter (no real customer content in public traces).
 
-#### 31. Test before action; smoke before cutover
+#### 32. Test before action; smoke before cutover
 
 Every Tier impl, Provider, parser, and reconciler has unit tests. Every
 architectural component has integration tests exercising the narrative
