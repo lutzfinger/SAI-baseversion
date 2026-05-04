@@ -35,4 +35,40 @@ jobs:
             tests/test_cascade_framework_e2e.py \
             tests/test_proposal_intake.py \
             tests/test_proposal_apply_eval_add.py \
+            tests/test_skill_manifest.py \
+            tests/test_skill_integrity.py \
+            tests/test_sai_eval_tools.py \
+            tests/test_slack_response_models.py \
             tests/canonical/
+
+  sample-skill-e2e:
+    # Per MVP-GAPS Gap 15 + docs/design_live_public_versioning.md:
+    # every PR gates on "the skill plug-in protocol still works against
+    # a real skill." The sample_echo_skill is the canonical reference;
+    # if its integrity hash drifts (someone edited a runner.py without
+    # re-stamping) OR if the cascade walk against its workflow_regression
+    # cases changes outcome, this job fails.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev] || pip install -e .
+      - name: Validate + integrity-check sample skill via promote_skill CLI
+        run: |
+          python -m scripts.promote_skill --in-place \
+            --incoming-dir app/skills/sample_echo_skill \
+            --target-dir   app/skills/sample_echo_skill
+      - name: Sample skill integrity hash unchanged
+        # If this fails, someone edited the sample skill without
+        # re-running promote_skill --in-place. Either re-stamp or
+        # revert the edit.
+        run: |
+          git diff --exit-code app/skills/sample_echo_skill/.skill-content-sha256
+      - name: Sample skill cascade end-to-end regression
+        run: |
+          python -m pytest -n auto -v tests/test_cascade_framework_e2e.py

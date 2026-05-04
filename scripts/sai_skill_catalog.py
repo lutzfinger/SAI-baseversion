@@ -6,20 +6,36 @@ KNOWS what skills exist instead of having to discover them.
 
 Usage:
     python -m scripts.sai_skill_catalog
-    python -m scripts.sai_skill_catalog --skills-dir ~/Lutz_Dev/SAI/skills
+    python -m scripts.sai_skill_catalog --skills-dir $SAI_PRIVATE/skills
     python -m scripts.sai_skill_catalog --paste-into docs/cowork_skill_creator_prompt.md
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
 
 import yaml
 
-DEFAULT_SKILLS_DIR = Path.home() / "Lutz_Dev" / "SAI" / "skills"
+
+def _default_skills_dir() -> Path:
+    """Default skill location.
+
+    Honours ``$SAI_PRIVATE`` if set (operator's private overlay
+    path), otherwise falls back to a vendor-neutral
+    ``~/.sai/skills`` placeholder. Operator overrides via
+    ``--skills-dir``.
+    """
+    private = os.environ.get("SAI_PRIVATE")
+    if private:
+        return Path(private) / "skills"
+    return Path.home() / ".sai" / "skills"
+
+
+DEFAULT_SKILLS_DIR = _default_skills_dir()
 ANCHOR_BEGIN = "<!-- SAI_SKILL_CATALOG_BEGIN -->"
 ANCHOR_END = "<!-- SAI_SKILL_CATALOG_END -->"
 
@@ -71,6 +87,10 @@ def render_catalog(skills_dir: Path) -> str:
                 eval_kinds.append(k)
         eval_kinds_str = ", ".join(eval_kinds) or "(none)"
 
+        try:
+            display_path = skill_dir.relative_to(Path.home())
+        except ValueError:
+            display_path = skill_dir  # outside $HOME — show absolute path
         rows.append(
             f"### `{wf_id}` (v{version})\n\n"
             f"{description}\n\n"
@@ -78,7 +98,7 @@ def render_catalog(skills_dir: Path) -> str:
             f"- **Cascade:** {tier_summary}\n"
             f"- **Outputs:** {output_names}\n"
             f"- **Eval:** {eval_kinds_str}\n"
-            f"- **Path:** `{skill_dir.relative_to(Path.home())}` (private overlay)\n"
+            f"- **Path:** `{display_path}` (private overlay)\n"
         )
     if not rows:
         return "_No installed skills found._\n"

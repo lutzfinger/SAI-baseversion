@@ -349,3 +349,42 @@ class TestSampleSkill:
         assert len(m.outputs) >= 1
         # Has policy configured
         assert m.policy.iteration_cap > 0
+
+
+# ─── integrity check (Phase 2 lenient) ────────────────────────────────
+
+
+class TestLoaderIntegrityCheck:
+    """Phase 2 of the integrity rollout (per
+    docs/design_live_public_versioning.md): if a .skill-content-sha256
+    file exists, the loader verifies it. Drift becomes a warning,
+    NOT an error. Skills without the integrity file are silently
+    allowed (so existing skills don't break before they're stamped)."""
+
+    def test_no_integrity_file_silently_allowed(self, tmp_path):
+        skill_dir = _stage_skill(tmp_path)
+        m, report = load_skill_manifest(skill_dir)
+        assert m is not None
+        assert report.ok
+        assert not any(w.rule == "integrity.drift" for w in report.warnings)
+
+    def test_integrity_file_unchanged_no_warning(self, tmp_path):
+        from app.skills.integrity import write_integrity_file
+        skill_dir = _stage_skill(tmp_path)
+        write_integrity_file(skill_dir)
+        m, report = load_skill_manifest(skill_dir)
+        assert m is not None
+        assert report.ok
+        assert not any(w.rule == "integrity.drift" for w in report.warnings)
+
+    def test_integrity_drift_emits_warning_not_error(self, tmp_path):
+        from app.skills.integrity import write_integrity_file
+        skill_dir = _stage_skill(tmp_path)
+        write_integrity_file(skill_dir)
+        # Tamper with a file that's part of the hash.
+        (skill_dir / "canaries.jsonl").write_text('{"i":99}\n')
+        m, report = load_skill_manifest(skill_dir)
+        assert m is not None
+        # Phase 2: drift is a warning, NOT an error — skill still loads.
+        assert report.ok, "Phase 2 must not block on drift"
+        assert any(w.rule == "integrity.drift" for w in report.warnings)

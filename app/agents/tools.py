@@ -231,6 +231,107 @@ class ProposeLlmExampleInput(BaseModel):
     )
 
 
+# ─── tool output schemas (validated before return per #6a) ────────────
+
+
+class ToolErrorOutput(BaseModel):
+    """Shared error shape — any tool that hits a validation, fetch, or
+    pre-condition failure returns {"error": "<reason>"} which the LLM
+    sees as a tool result and adjusts on the next turn."""
+    model_config = ConfigDict(extra="forbid")
+    error: str
+
+
+class SearchCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message_id: str
+    thread_id: str | None = None
+    from_email: str
+    from_name: str | None = None
+    subject: str
+    snippet: str
+    received_at_iso: str | None = None
+
+
+class SearchGmailOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    query_used: str
+    candidates: list[SearchCandidate]
+
+
+class ReadMessageOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message_id: str
+    thread_id: str | None = None
+    from_email: str
+    from_name: str | None = None
+    to: list[str]
+    subject: str
+    snippet: str
+    body_excerpt: str
+    received_at_iso: str | None = None
+
+
+class ThreadMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: int
+    message_id: str
+    from_email: str
+    from_name: str | None = None
+    subject: str
+    snippet: str
+    received_at_iso: str | None = None
+    is_external: bool
+
+
+class ReadThreadOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thread_id: str
+    internal_domains: list[str]
+    messages: list[ThreadMessage]
+    first_external_index: int | None
+    first_external_message_id: str | None
+    first_external_from_email: str | None
+
+
+class ListGmailLabelsOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    labels: list[str]
+    filter_used: str | None = None
+
+
+class ProposeClassifierRuleOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    proposal_id: str
+    staged_path: str
+    operator_message: str
+
+
+class ProposeLlmExampleOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    proposal_id: str
+    staged_path: str
+    operator_message: str
+
+
+def _validate_output(success_model: type[BaseModel], d: dict[str, Any]) -> dict[str, Any]:
+    """Validate a tool's return dict against its declared output model.
+
+    Per PRINCIPLES.md §6a — every output is guarded. Two-shape dispatch:
+      * Dicts containing "error" validate against ``ToolErrorOutput``
+      * Everything else validates against ``success_model``
+
+    A validation failure raises ``pydantic.ValidationError`` which the
+    LangChain runtime surfaces back to the LLM as a tool error — the
+    LLM can adjust on the next turn. This is the right behavior: a
+    drifted output shape is a tool-impl bug; we'd rather surface than
+    silently pass garbage downstream.
+    """
+    if "error" in d:
+        return ToolErrorOutput.model_validate(d).model_dump(mode="json")
+    return success_model.model_validate(d).model_dump(mode="json")
+
+
 # ─── tool builders (closures over ToolContext) ────────────────────────
 
 
@@ -260,7 +361,7 @@ def _build_search_gmail(ctx: ToolContext) -> StructuredTool:
 
         q = (query or "").strip()
         if not q:
-            return {"query_used": "", "candidates": []}
+            return _validate_output(SearchGmailOutput, {"query_used": "", "candidates": []})
 
         connector = GmailAPIConnector(
             authenticator=ctx.gmail_authenticator,
@@ -270,7 +371,7 @@ def _build_search_gmail(ctx: ToolContext) -> StructuredTool:
             max_results=min(max_results, MAX_SEARCH_RESULTS),
         )
         messages = connector.fetch_messages()
-        return {
+        return _validate_output(SearchGmailOutput, {
             "query_used": q,
             "candidates": [
                 {
@@ -286,7 +387,7 @@ def _build_search_gmail(ctx: ToolContext) -> StructuredTool:
                 }
                 for m in messages
             ],
-        }
+        })
 
     return StructuredTool.from_function(
         name="search_gmail",
@@ -308,7 +409,9 @@ def _build_search_gmail(ctx: ToolContext) -> StructuredTool:
 def _build_read_message(ctx: ToolContext) -> StructuredTool:
     def _read_message(message_id: str) -> dict[str, Any]:
         if not MESSAGE_ID_PATTERN.match(message_id):
-            return {"error": f"message_id has unexpected shape: {message_id!r}"}
+            return _validate_output(ReadMessageOutput, {
+                "error": f"message_id has unexpected shape: {message_id!r}"
+            })
 
         from app.connectors.gmail import GmailAPIConnector
 
@@ -332,7 +435,7 @@ def _build_read_message(ctx: ToolContext) -> StructuredTool:
                 for h in msg.get("payload", {}).get("headers", [])
                 if isinstance(h, dict)
             }
-            return {
+            return _validate_output(ReadMessageOutput, {
                 "message_id": message_id,
                 "thread_id": msg.get("threadId"),
                 "from_email": headers.get("from", ""),
@@ -342,10 +445,10 @@ def _build_read_message(ctx: ToolContext) -> StructuredTool:
                 "snippet": _truncate_snippet(msg.get("snippet")),
                 "body_excerpt": "",
                 "received_at_iso": None,
-            }
+            })
 
         m = messages[0]
-        return {
+        return _validate_output(ReadMessageOutput, {
             "message_id": m.message_id,
             "thread_id": m.thread_id,
             "from_email": m.from_email,
@@ -357,7 +460,7 @@ def _build_read_message(ctx: ToolContext) -> StructuredTool:
             "received_at_iso": (
                 m.received_at.isoformat() if m.received_at else None
             ),
-        }
+        })
 
     return StructuredTool.from_function(
         name="read_message",
@@ -377,7 +480,9 @@ def _build_read_message(ctx: ToolContext) -> StructuredTool:
 def _build_read_thread(ctx: ToolContext) -> StructuredTool:
     def _read_thread(thread_id: str) -> dict[str, Any]:
         if not THREAD_ID_PATTERN.match(thread_id):
-            return {"error": f"thread_id has unexpected shape: {thread_id!r}"}
+            return _validate_output(ReadThreadOutput, {
+                "error": f"thread_id has unexpected shape: {thread_id!r}"
+            })
 
         from app.connectors.gmail import GmailAPIConnector
 
@@ -391,7 +496,9 @@ def _build_read_thread(ctx: ToolContext) -> StructuredTool:
         try:
             thread_msgs = connector.fetch_thread_messages(thread_id=thread_id)
         except Exception as exc:
-            return {"error": f"thread fetch failed: {exc}"}
+            return _validate_output(ReadThreadOutput, {
+                "error": f"thread fetch failed: {exc}"
+            })
 
         thread_msgs = thread_msgs[:MAX_THREAD_MESSAGES]
         # Sort oldest first.
@@ -419,7 +526,7 @@ def _build_read_thread(ctx: ToolContext) -> StructuredTool:
                 "is_external": external,
             })
 
-        return {
+        return _validate_output(ReadThreadOutput, {
             "thread_id": thread_id,
             "internal_domains": sorted(internal),
             "messages": out_messages,
@@ -432,7 +539,7 @@ def _build_read_thread(ctx: ToolContext) -> StructuredTool:
                 out_messages[first_external_idx]["from_email"]
                 if first_external_idx is not None else None
             ),
-        }
+        })
 
     return StructuredTool.from_function(
         name="read_thread",
@@ -457,7 +564,10 @@ def _build_list_gmail_labels(ctx: ToolContext) -> StructuredTool:
     def _list_labels(contains: str | None = None) -> dict[str, Any]:
         cache_key = f"labels::{contains or ''}"
         if cache_key in ctx.cache:
-            return {"labels": list(ctx.cache[cache_key])}
+            return _validate_output(ListGmailLabelsOutput, {
+                "labels": list(ctx.cache[cache_key]),
+                "filter_used": contains,
+            })
 
         service = ctx.gmail_authenticator.build_service()
         response = service.users().labels().list(userId="me").execute()
@@ -480,7 +590,10 @@ def _build_list_gmail_labels(ctx: ToolContext) -> StructuredTool:
         )
         filtered = [n for n in filtered if not n.startswith(system_prefixes)]
         ctx.cache[cache_key] = filtered
-        return {"labels": filtered, "filter_used": contains}
+        return _validate_output(ListGmailLabelsOutput, {
+            "labels": filtered,
+            "filter_used": contains,
+        })
 
     return StructuredTool.from_function(
         name="list_gmail_labels",
@@ -505,24 +618,30 @@ def _build_propose_classifier_rule(ctx: ToolContext) -> StructuredTool:
         target: str, target_kind: str, label: str, why: str,
     ) -> dict[str, Any]:
         if target_kind not in ("sender_email", "sender_domain"):
-            return {"error": f"target_kind must be sender_email or sender_domain, got {target_kind!r}"}
+            return _validate_output(ProposeClassifierRuleOutput, {
+                "error": f"target_kind must be sender_email or sender_domain, got {target_kind!r}"
+            })
         target = target.strip().lower()
         if target_kind == "sender_email" and "@" not in target:
-            return {"error": f"target_kind=sender_email but {target!r} has no '@'"}
+            return _validate_output(ProposeClassifierRuleOutput, {
+                "error": f"target_kind=sender_email but {target!r} has no '@'"
+            })
         if not BUCKET_NAME_PATTERN.match(label):
-            return {"error": f"label {label!r} has unexpected shape"}
+            return _validate_output(ProposeClassifierRuleOutput, {
+                "error": f"label {label!r} has unexpected shape"
+            })
 
         # Verify the label actually exists in Gmail.
         labels_check = ctx.cache.get("labels_full") or _list_all_labels(ctx)
         if label not in labels_check:
-            return {
+            return _validate_output(ProposeClassifierRuleOutput, {
                 "error": (
                     f"Label `{label}` doesn't exist in Gmail yet. "
                     f"Available labels include: {', '.join(labels_check[:15])}"
                     + (" …" if len(labels_check) > 15 else "")
                     + ". Tell the operator to create the label in Gmail first."
                 ),
-            }
+            })
 
         proposal_id = _proposal_id("rule_add", target)
         # Strip a trailing L1/, L2/ prefix from the bucket-as-stored — the
@@ -548,7 +667,7 @@ def _build_propose_classifier_rule(ctx: ToolContext) -> StructuredTool:
             proposed_dir=ctx.proposed_dir,
             proposal_id=proposal_id, payload=payload,
         )
-        return {
+        return _validate_output(ProposeClassifierRuleOutput, {
             "proposal_id": proposal_id,
             "staged_path": str(path),
             "operator_message": (
@@ -557,7 +676,7 @@ def _build_propose_classifier_rule(ctx: ToolContext) -> StructuredTool:
                 f"React :white_check_mark: to apply (canary will regenerate "
                 f"+ regression will run before commit) or :x: to cancel."
             ),
-        }
+        })
 
     return StructuredTool.from_function(
         name="propose_classifier_rule",
@@ -580,18 +699,22 @@ def _build_propose_classifier_rule(ctx: ToolContext) -> StructuredTool:
 def _build_propose_llm_example(ctx: ToolContext) -> StructuredTool:
     def _propose(message_id: str, label: str, why: str) -> dict[str, Any]:
         if not MESSAGE_ID_PATTERN.match(message_id):
-            return {"error": f"message_id {message_id!r} has unexpected shape"}
+            return _validate_output(ProposeLlmExampleOutput, {
+                "error": f"message_id {message_id!r} has unexpected shape"
+            })
         if not BUCKET_NAME_PATTERN.match(label):
-            return {"error": f"label {label!r} has unexpected shape"}
+            return _validate_output(ProposeLlmExampleOutput, {
+                "error": f"label {label!r} has unexpected shape"
+            })
 
         labels_check = ctx.cache.get("labels_full") or _list_all_labels(ctx)
         if label not in labels_check:
-            return {
+            return _validate_output(ProposeLlmExampleOutput, {
                 "error": (
                     f"Label `{label}` doesn't exist in Gmail yet. "
                     f"Tell the operator to create it first."
                 ),
-            }
+            })
 
         # Pull the message details so the proposal carries everything
         # the apply path needs without a second Gmail fetch.
@@ -638,13 +761,13 @@ def _build_propose_llm_example(ctx: ToolContext) -> StructuredTool:
                     received_at=None,
                 )
             except Exception as exc:
-                return {
+                return _validate_output(ProposeLlmExampleOutput, {
                     "error": (
                         f"couldn't fetch message {message_id!r} via either "
                         f"rfc822msgid: search OR Gmail internal-id lookup: "
                         f"{type(exc).__name__}: {exc}"
                     ),
-                }
+                })
 
         proposal_id = _proposal_id("eval_add", message_id)
         bucket = label.split("/", 1)[1].lower() if "/" in label else label.lower()
@@ -675,7 +798,7 @@ def _build_propose_llm_example(ctx: ToolContext) -> StructuredTool:
             proposed_dir=ctx.proposed_dir,
             proposal_id=proposal_id, payload=payload,
         )
-        return {
+        return _validate_output(ProposeLlmExampleOutput, {
             "proposal_id": proposal_id,
             "staged_path": str(path),
             "operator_message": (
@@ -686,7 +809,7 @@ def _build_propose_llm_example(ctx: ToolContext) -> StructuredTool:
                 f"(regression on edge_cases will run before commit) or "
                 f":x: to cancel."
             ),
-        }
+        })
 
     return StructuredTool.from_function(
         name="propose_llm_example",

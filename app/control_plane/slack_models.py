@@ -85,3 +85,79 @@ class SlackTaskRequest(BaseModel):
     message_ts: str
     task_text: str
     feedback_id: str
+
+
+# ─── Slack Web API response models (per #6a — every network response
+# validates against an explicit shape) ────────────────────────────────
+
+
+class _SlackResponseBase(BaseModel):
+    """Common base for every Slack Web API response.
+
+    Slack adds new fields to responses without notice. We use
+    ``extra="ignore"`` so additions don't break validation, but every
+    field we actually READ must be declared and typed — drift in a
+    field we use surfaces as a ``ValidationError`` rather than a
+    silent ``None`` downstream.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool
+    error: str | None = None
+
+
+class SlackChatPostMessageResponse(_SlackResponseBase):
+    """Response shape from ``chat.postMessage``."""
+
+    channel: str | None = None
+    ts: str | None = None
+
+
+class SlackConversationsHistoryResponse(_SlackResponseBase):
+    """Response shape from ``conversations.history``.
+
+    ``messages`` is a list of opaque Slack message dicts; we don't
+    re-validate each message structure because consumers may use
+    different fields and Slack's per-message shape is huge.
+    """
+
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class _SlackChannelStub(BaseModel):
+    """Minimal channel shape we read from Slack — just enough for
+    name→id resolution + DM channel resolution."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str | None = None
+    name: str | None = None
+
+
+class SlackConversationsListResponse(_SlackResponseBase):
+    """Response shape from ``conversations.list``."""
+
+    channels: list[_SlackChannelStub] = Field(default_factory=list)
+    response_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SlackConversationsOpenResponse(_SlackResponseBase):
+    """Response shape from ``conversations.open`` (DM creation)."""
+
+    channel: _SlackChannelStub | None = None
+
+
+class _SlackFileStub(BaseModel):
+    """Minimal file shape we read from ``files_upload_v2``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str | None = None
+    permalink: str | None = None
+
+
+class SlackFilesUploadResponse(_SlackResponseBase):
+    """Response shape from ``files_upload_v2``."""
+
+    file: _SlackFileStub | None = None

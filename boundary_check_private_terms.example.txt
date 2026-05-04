@@ -1,31 +1,46 @@
 # Operator-specific terms for the boundary linter — PRIVATE template.
 #
 # COPY this file to `boundary_check_private_terms.txt` (which is in
-# .gitignore) and fill in YOUR operator-specific terms below.
+# .gitignore) and fill in YOUR operator-specific terms below. All
+# matches report under rule `operator-narrative-leak` and fire even
+# in allowlisted files — they're operator data and should never
+# appear in PUBLIC docs.
 #
 # Each line is a regex pattern (case-insensitive). Lines starting with #
 # are comments. Empty lines are skipped.
 #
-# These patterns are checked even in allowlisted markdown files, which
-# is where operator data has historically leaked (PRINCIPLES.md /
-# MIGRATION-PRINCIPLES.md narratives that mention real contacts /
-# private bucket names / non-placeholder domains).
+# What's ALREADY caught by PUBLIC heuristics (you don't need to add
+# these — they're built into scripts/boundary_check.py):
+#   - "the operator's wife/husband/partner/daughter/son/..." etc.
+#   - "{Name}'s setup/inbox/calendar/laptop/notes/..." etc.
+#   - The maintainer's own personal-string set (see PERSONAL_STRINGS_RE
+#     in scripts/boundary_check.py for what's hard-coded)
 #
-# Examples (replace with YOUR terms — these are placeholders):
+# What this file is for: OPERATOR-SPECIFIC names + bucket terms +
+# company domains that the public heuristics can't know about.
 #
-# # Private bucket names that should never appear in PUBLIC docs:
-# \bcherry\b
-# \bkeynote\b
-# \bellis\b
+# Examples (these are placeholder names — replace with YOUR terms):
 #
-# # Operator's frequent contact names:
-# \bdinika\b
-# \bkamal\b
-# \bchris\b
+# # Private contact names (family / colleagues / friends that get
+# # mentioned in design narratives):
+# \balice\b
+# \bbob\b
+# \bcharlie\b
+#
+# # Private bucket / category names from your Gmail labels that
+# # should never appear in PUBLIC docs:
+# \bcustomers-vip\b
+# \bproject-stealth\b
 #
 # # Operator-specific domains beyond what `personal-string` already covers:
-# # (one regex per line, anchored)
-# # \byour-company\.com\b
+# \byour-company\.com\b
+# \byour-personal\.org\b
 #
 # # Generic operator identifiers beyond what's already in PERSONAL_STRINGS_RE:
-# # \byour-handle\b
+# \byour-handle\b
+#
+# # Common narrative shapes that always indicate a leak in your
+# # specific writing style (these vary per operator):
+# # \bin my setup\b
+# # \bmy fianc[ée]e?\b
+# # \bmy startup called \w+\b

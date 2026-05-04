@@ -437,3 +437,88 @@ class TestInternalDomainsConfig:
     def test_empty_falls_back_to_placeholder(self, monkeypatch):
         monkeypatch.setenv("SAI_INTERNAL_DOMAINS", "")
         assert _internal_domains() == {"example.com"}
+
+
+# ─── output validation per #6a ────────────────────────────────────────
+
+
+class TestOutputValidation:
+    """Per PRINCIPLES.md §6a — every tool output is validated against
+    its declared Pydantic model before returning. This catches drift
+    in tool implementations (a tool starts emitting a field outside
+    its schema) BEFORE the LLM ever sees the malformed shape."""
+
+    def test_validate_output_dispatches_error_path(self):
+        from app.agents.tools import (
+            SearchGmailOutput,
+            _validate_output,
+        )
+        # Error dicts go through ToolErrorOutput regardless of the
+        # success-model passed in.
+        out = _validate_output(SearchGmailOutput, {"error": "bang"})
+        assert out == {"error": "bang"}
+
+    def test_validate_output_rejects_unknown_field_in_success(self):
+        from pydantic import ValidationError
+        from app.agents.tools import (
+            ListGmailLabelsOutput,
+            _validate_output,
+        )
+        # extra="forbid" — drift surfaces as ValidationError, which
+        # the LangChain runtime then surfaces back to the LLM as a
+        # tool error so the LLM can adjust on the next turn.
+        with pytest.raises(ValidationError):
+            _validate_output(ListGmailLabelsOutput, {
+                "labels": ["L1/Customers"],
+                "filter_used": None,
+                "secret_field": "leaked",  # unexpected
+            })
+
+    def test_validate_output_rejects_unknown_field_in_error(self):
+        from pydantic import ValidationError
+        from app.agents.tools import (
+            SearchGmailOutput,
+            _validate_output,
+        )
+        with pytest.raises(ValidationError):
+            _validate_output(SearchGmailOutput, {
+                "error": "bang",
+                "extra": "shouldn't be here",
+            })
+
+    def test_search_gmail_returns_validated_shape(self, tmp_path):
+        ctx = _ctx(tmp_path)
+        # Empty query short-circuits to {"query_used": "", "candidates": []}.
+        tools = build_tools(ctx)
+        search_tool = next(t for t in tools if t.name == "search_gmail")
+        out = search_tool.invoke({"query": "  "})
+        # Must match SearchGmailOutput shape exactly.
+        assert set(out.keys()) == {"query_used", "candidates"}
+
+    def test_propose_classifier_rule_error_path_validates(self, tmp_path):
+        ctx = _ctx(tmp_path, gmail_labels=["L1/Customers"])
+        tools = build_tools(ctx)
+        propose = next(t for t in tools if t.name == "propose_classifier_rule")
+        # Bad target_kind triggers the error path.
+        out = propose.invoke({
+            "target": "alex@example.com",
+            "target_kind": "bogus",
+            "label": "L1/Customers",
+            "why": "test",
+        })
+        # Validated against ToolErrorOutput → only the "error" key.
+        assert set(out.keys()) == {"error"}
+
+    def test_list_gmail_labels_cached_path_validates(self, tmp_path):
+        """The cached return path (where labels are pulled from
+        ctx.cache) used to omit `filter_used` — fixed during the
+        output-validation pass. Regression guard."""
+        ctx = _ctx(tmp_path, gmail_labels=["L1/Customers", "L1/Partners"])
+        tools = build_tools(ctx)
+        list_tool = next(t for t in tools if t.name == "list_gmail_labels")
+        # First call populates the cache.
+        out1 = list_tool.invoke({})
+        # Second call hits the cache — must still validate.
+        out2 = list_tool.invoke({})
+        assert set(out1.keys()) == {"labels", "filter_used"}
+        assert set(out2.keys()) == {"labels", "filter_used"}
