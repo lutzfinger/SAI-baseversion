@@ -74,6 +74,8 @@ class AnthropicMessagesProvider:
             "tool_choice": {"type": "tool", "name": tool_name},
             "temperature": request.temperature,
         }
+        if request.system:
+            body["system"] = request.system
 
         url = f"{self.base_url}/v1/messages"
         encoded = json.dumps(body).encode("utf-8")

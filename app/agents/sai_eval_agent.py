@@ -120,6 +120,7 @@ def run_agent(
     model: Optional[str] = None,
     audit_path: Optional[Path] = None,
     intent_context: Optional[str] = None,
+    progress_poster: Optional[Any] = None,
 ) -> AgentResult:
     """Run one agent turn over `source_text`. Returns AgentResult.
 
@@ -129,6 +130,14 @@ def run_agent(
     `intent_context` (optional) — when re-invoking under an open
     pending intent (PRINCIPLES.md §16g), pass the prior-attempts
     summary so the agent doesn't re-propose a rejected shape.
+
+    `progress_poster` (optional) — Callable[[str], None]. Called on
+    every tool start with a short human-readable progress line
+    (e.g. "🔧 calling `search_gmail`…"). Slack handler passes a
+    closure that posts to the active thread; tests pass None.
+    Closes MVP-GAPS Gap 14 (async UX for the agent's tool calls).
+    The callable MUST be non-blocking and exception-safe — handler
+    swallows any error so a Slack outage doesn't break the agent.
     """
 
     # Per #24b: model id comes from the registry by role. SAI_AGENT_MODEL
@@ -213,7 +222,7 @@ def run_agent(
     # on_tool_start / on_tool_end / on_llm_end events. The handler is
     # a BaseCallbackHandler subclass (built lazily so we don't import
     # LangChain at module-load time).
-    handler = _audit_handler_class()(invocation)
+    handler = _audit_handler_class()(invocation, progress_poster=progress_poster)
 
     # When re-invoking under an open pending intent, prepend the
     # prior-attempts context so the agent can adjust shape rather
@@ -354,10 +363,16 @@ def _audit_handler_class():
     from langchain_core.callbacks.base import BaseCallbackHandler
 
     class _AuditHandler(BaseCallbackHandler):
-        def __init__(self, invocation: AgentInvocation):
+        def __init__(
+            self,
+            invocation: AgentInvocation,
+            *,
+            progress_poster: Any = None,
+        ):
             super().__init__()
             self.invocation = invocation
             self.iterations = 0
+            self.progress_poster = progress_poster
 
         def on_llm_end(self, response: Any, *args: Any, **kwargs: Any) -> None:
             return _audit_on_llm_end(self, response)
@@ -366,16 +381,62 @@ def _audit_handler_class():
             self, serialized: dict, input_str: str, *args: Any, **kwargs: Any,
         ) -> None:
             _audit_on_tool_start(self, serialized, input_str)
+            # Async UX (Gap 14): notify the operator that a tool is
+            # firing. Errors are swallowed — the agent must keep
+            # running even if Slack is down.
+            if self.progress_poster is not None:
+                tool_name = (serialized or {}).get("name", "?")
+                args_short = (str(input_str) or "")[:120]
+                line = f":hourglass_flowing_sand: calling `{tool_name}` …"
+                if args_short and args_short not in ("{}", "None"):
+                    line = f"{line} (args: `{args_short}`)"
+                try:
+                    self.progress_poster(line)
+                except Exception:
+                    pass
 
         def on_tool_end(self, output: Any, *args: Any, **kwargs: Any) -> None:
             _audit_on_tool_end(self, output)
+            if self.progress_poster is not None:
+                # Surface the tool's return at a glance: dict → key
+                # summary; string → first line; otherwise the type.
+                summary = _summarize_tool_output(output)
+                try:
+                    self.progress_poster(f":white_check_mark: tool returned: {summary}")
+                except Exception:
+                    pass
 
         def on_tool_error(
             self, error: Exception, *args: Any, **kwargs: Any,
         ) -> None:
             _audit_on_tool_error(self, error)
+            if self.progress_poster is not None:
+                try:
+                    self.progress_poster(
+                        f":x: tool error: `{type(error).__name__}: {error}`"
+                    )
+                except Exception:
+                    pass
 
     return _AuditHandler
+
+
+def _summarize_tool_output(output: Any) -> str:
+    """One-line glance at a tool's return value for Slack progress posts."""
+    if output is None:
+        return "(no result)"
+    if isinstance(output, dict):
+        # Highlight common useful keys; fall back to keys list.
+        for key in ("staged_path", "n_results", "operator_message", "candidates"):
+            if key in output:
+                val = output[key]
+                if isinstance(val, list):
+                    return f"{key}=[{len(val)} items]"
+                return f"{key}={str(val)[:80]}"
+        return "{" + ", ".join(sorted(output.keys())[:4]) + "}"
+    s = str(output)
+    first_line = s.split("\n", 1)[0][:140]
+    return first_line or f"({type(output).__name__})"
 
 
 def _audit_on_llm_end(handler: Any, response: Any) -> None:

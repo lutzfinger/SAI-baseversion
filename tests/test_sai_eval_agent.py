@@ -161,3 +161,59 @@ class TestAgentResult:
         assert result.invocation.invocation_id.startswith("agent_")
         assert result.invocation.iterations >= 1
         assert result.invocation.model_used == DEFAULT_MODEL
+
+
+# ─── Gap 14: progress_poster ─────────────────────────────────────────
+
+
+class TestProgressPoster:
+    """The optional progress_poster callback fires on every tool start
+    so the operator sees mid-call progress in Slack instead of one
+    monolithic final post."""
+
+    def test_summarize_tool_output_handles_dict(self):
+        from app.agents.sai_eval_agent import _summarize_tool_output
+        out = _summarize_tool_output({"staged_path": "/tmp/x.yaml", "ok": True})
+        assert "staged_path" in out
+        assert "/tmp/x.yaml" in out
+
+    def test_summarize_tool_output_handles_list_in_dict(self):
+        from app.agents.sai_eval_agent import _summarize_tool_output
+        out = _summarize_tool_output({"candidates": [1, 2, 3, 4, 5]})
+        assert "candidates" in out
+        assert "5" in out
+
+    def test_summarize_tool_output_handles_none(self):
+        from app.agents.sai_eval_agent import _summarize_tool_output
+        assert "no result" in _summarize_tool_output(None)
+
+    def test_summarize_tool_output_truncates_long_strings(self):
+        from app.agents.sai_eval_agent import _summarize_tool_output
+        out = _summarize_tool_output("x" * 500)
+        assert len(out) <= 145  # first line, capped 140
+
+    def test_progress_poster_accepted_as_kwarg(self, tmp_path):
+        """Just verify the kwarg is accepted; the LLM is fake (no tool
+        calls) so the poster won't fire — but the signature is stable."""
+        audit = tmp_path / "audit.jsonl"
+        llm = _fake_llm_returning("ok")
+        captured: list[str] = []
+        result = run_agent(
+            llm=llm,
+            progress_poster=lambda line: captured.append(line),
+            **_ctx_kwargs(tmp_path, audit),
+        )
+        assert result.invocation is not None  # didn't crash
+
+    def test_progress_poster_swallows_errors(self, tmp_path):
+        """If the poster raises (Slack outage), the agent must not crash."""
+        audit = tmp_path / "audit.jsonl"
+        llm = _fake_llm_returning("ok")
+        def _broken(_line):
+            raise RuntimeError("slack is down")
+        result = run_agent(
+            llm=llm,
+            progress_poster=_broken,
+            **_ctx_kwargs(tmp_path, audit),
+        )
+        assert result.invocation is not None  # agent finished anyway

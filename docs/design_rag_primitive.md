@@ -188,7 +188,7 @@ grounding-weak). Per #16d every skill ships its own eval contract.
 2. **Next: Co-Work designs the sai-rag SKILL** — runner config,
    collection→VectorStore mapping, system prompt for the agent (when
    to query, how to cite, how to refuse on weak grounding). Skill
-   lands in `~/Lutz_Dev/SAI/skills/sai-rag/`.
+   lands in `$SAI_PRIVATE/skills/sai-rag/`.
 3. **Operator flips the channel ON:** add `#sai-rag` to the
    operator's Slack workspace; the bot picks up the topic from
    `channel_allowed_discussion.yaml` and starts handling questions.

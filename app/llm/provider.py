@@ -47,6 +47,12 @@ class LLMRequest(BaseModel):
     response_schema_name: str = "Response"
     max_output_tokens: int | None = None
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    system: str | None = Field(
+        default=None,
+        description="Optional system prompt. When set, providers that support "
+                    "system messages (Anthropic, OpenAI) place this in the "
+                    "system slot instead of prepending to the user prompt.",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
