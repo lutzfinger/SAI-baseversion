@@ -33,13 +33,13 @@ class TestChatPostMessageResponse:
         # Real Slack chat.postMessage success shape (trimmed).
         raw = {
             "ok": True,
-            "channel": "C0123456789",
+            "channel": "CABCDEFGHI",
             "ts": "1700000000.000100",
             "message": {"user": "U999", "text": "..."},  # extra — ignored
         }
         resp = SlackChatPostMessageResponse.model_validate(raw)
         assert resp.ok is True
-        assert resp.channel == "C0123456789"
+        assert resp.channel == "CABCDEFGHI"
         assert resp.ts == "1700000000.000100"
 
     def test_error_response(self):

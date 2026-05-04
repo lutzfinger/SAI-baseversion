@@ -125,7 +125,7 @@ NARRATIVE_LEAK_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     # Possessive proper-name shapes WHERE the noun signals a personal
-    # narrative — e.g. "Lutz's wife", "Isabelle's setup", "Chris's
+    # narrative — e.g. "Alice's wife", "Bob's setup", "Charlie's
     # workflow". Capitalized-first-letter possessive followed by a
     # personal-narrative noun. Carefully scoped to avoid false-positive
     # technical possessives like "Slack's API" or "Pydantic's model".

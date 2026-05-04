@@ -77,3 +77,15 @@ docs/cowork_skill_creator_prompt.md
 # channel names (#sai-eval) and example skill paths in the
 # operator's overlay (Lutz_Dev/SAI/skills/) as concrete examples
 # of the canonical layout.
+
+config/.env.example.1password
+# Public template for the 1Password backend choice. Documents the
+# `op://<vault>/<item>/<field>` and `keychain://sai/...` reference
+# schemes — those literal scheme names are exactly what the file
+# is teaching the operator to use, so the secret-scheme-reference
+# rule must not block them here.
+
+config/.env.example.keychain
+# Public template for the macOS Keychain backend choice. Documents
+# the `keychain://sai/<account>` reference scheme. Same rationale
+# as the 1password template.
