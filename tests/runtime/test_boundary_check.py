@@ -191,7 +191,7 @@ class TestNarrativeLeakHeuristics:
 
     def test_the_operators_children_caught(self, tmp_path):
         f = tmp_path / "leak.md"
-        f.write_text("The operator's children attend Cornell.\n")
+        f.write_text("The operator's children attend the local school.\n")
         v = scan_file(f, root=tmp_path)
         assert any(x.rule == "operator-narrative-leak" for x in v)
 
