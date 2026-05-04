@@ -202,11 +202,11 @@ def test_fallback_returns_first_hit_skips_subject_and_free_text(mock_cls):
     """First attempt has matches → no fallback."""
     mock_cls.return_value.fetch_messages.return_value = [
         _fake_message(
-            message_id="m1", from_email="x@y.com",
+            message_id="m1", from_email="x@example.com",
             from_name="X", subject="hello", snippet="..."
         ),
     ]
-    r = resolve_with_fallback("x@y.com", authenticator=MagicMock())
+    r = resolve_with_fallback("x@example.com", authenticator=MagicMock())
     assert r.has_matches
     # Only one .resolve() call — first attempt succeeded.
     assert mock_cls.call_count == 1
@@ -218,7 +218,7 @@ def test_fallback_tries_subject_when_first_attempt_zero(mock_cls):
 
     call_results = [
         [],  # first attempt (from: ...) → 0
-        [_fake_message(message_id="m1", from_email="x@y.com", from_name="X", subject="Security alert", snippet="...")],  # subject: → 1
+        [_fake_message(message_id="m1", from_email="x@example.com", from_name="X", subject="Security alert", snippet="...")],  # subject: → 1
     ]
 
     def make_inner(*args, **kw):
@@ -241,7 +241,7 @@ def test_fallback_tries_free_text_after_subject_zero(mock_cls):
     call_results = [
         [],  # from:
         [],  # subject:
-        [_fake_message(message_id="m1", from_email="x@y.com", from_name="X", subject="s", snippet="...")],  # free_text
+        [_fake_message(message_id="m1", from_email="x@example.com", from_name="X", subject="s", snippet="...")],  # free_text
     ]
 
     def make_inner(*args, **kw):
@@ -269,7 +269,7 @@ def test_fallback_skips_subject_step_when_operator_already_specified(mock_cls):
     """If operator already said target_kind=subject, dont re-try subject."""
     call_results = [
         [],  # subject: → 0
-        [_fake_message(message_id="m1", from_email="x@y.com", from_name="X", subject="hit", snippet="...")],  # free_text → 1
+        [_fake_message(message_id="m1", from_email="x@example.com", from_name="X", subject="hit", snippet="...")],  # free_text → 1
     ]
 
     def make_inner(*args, **kw):

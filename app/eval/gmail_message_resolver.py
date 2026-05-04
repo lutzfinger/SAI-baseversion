@@ -1,15 +1,15 @@
 """Resolve a fuzzy operator reference (sender name, email, domain,
 subject substring) to one or more concrete Gmail messages.
 
-Used by the eval_add apply path: when an operator says "dinika's mail
+Used by the eval_add apply path: when an operator says "jane's mail
 should be cherry", we need to find the message they meant before we
 can append it to ``edge_cases.jsonl``.
 
 Three input shapes:
 
-  - **Email address** (``dinika@cherry.vc``) → Gmail query ``from:<addr>``
-  - **Domain** (``cherry.vc``) → Gmail query ``from:<domain>``
-  - **Fuzzy** (``dinika`` or ``Dinika Mahtani``) → Gmail query
+  - **Email address** (``person@example.com``) → Gmail query ``from:<addr>``
+  - **Domain** (``vendor.example``) → Gmail query ``from:<domain>``
+  - **Fuzzy** (``jane`` or ``Jane Doe``) → Gmail query
     ``from:<term>`` (Gmail's from: matches name AND address)
 
 Returns a ``ResolveResult`` with up to N matches; the slack_bot
@@ -86,8 +86,8 @@ def build_query(
     """Convert a fuzzy reference into a Gmail search query.
 
     Defaults to limiting to the last `days_back` days so we don't
-    pull a noisy hit from years ago when the operator said "dinika"
-    meaning "recent mail from dinika."
+    pull a noisy hit from years ago when the operator said "jane"
+    meaning "recent mail from jane."
 
     Supported `target_kind` values:
       * ``sender_email``  → ``from:<addr>``
@@ -113,7 +113,7 @@ def build_query(
         clause = f'subject:"{target}"'
     elif target_kind == "free_text":
         # Broad search — anywhere in the message. Catches "Security
-        # alert for testcornellstudenttest@gmail.com" appearing in a
+        # alert for tester@example.com" appearing in a
         # subject OR body OR from-display-name.
         clause = f'"{target}"' if " " in target else target
     elif "@" in target or target_kind == "sender_email":
@@ -124,7 +124,7 @@ def build_query(
         clause = f"from:{target}"
     else:
         # Fuzzy free-text — let Gmail's from: do the fuzzy match.
-        # Quote it if there's a space (e.g. "Dinika Mahtani").
+        # Quote it if there's a space (e.g. "Jane Doe").
         if " " in target:
             clause = f'from:"{target}"'
         else:

@@ -284,7 +284,7 @@ def _make_canary(
             "thread_id": f"canary-thread-{abs(hash(rule_id)) % (10**12):012d}",
             "from_email": synthetic_from,
             "from_name": from_name,
-            "to": (["hello@lutzfinger.com"] if directly_addressed else []),
+            "to": (["operator@example.com"] if directly_addressed else []),
             "cc": [],
             "subject": synthetic_subject,
             "snippet": snippet,

@@ -49,7 +49,7 @@ def test_scan_line_users_example_path_ok() -> None:
 
 
 def test_scan_line_slack_channel_flagged() -> None:
-    violations = scan_line("ok.py", 1, "post to #sai-status today")
+    violations = scan_line("ok.py", 1, "post to #notes-and-todos today")
     assert any(v.rule == "slack-channel-non-placeholder" for v in violations)
 
 

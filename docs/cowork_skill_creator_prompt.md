@@ -957,8 +957,6 @@ When the operator asks "what does X look like?", point them at:
 - `~/Lutz_Dev/SAI/skills/cornell-delay-triage/skill.yaml` (private) —
   e1 example: pure composition, no new primitives
 - `docs/e1_principles_audit.md` — audit doc shape for any new skill
-- `docs/e1_review_2026-05-04.md` — landing review + improvement
-  pattern
 
 ---
 

@@ -148,7 +148,7 @@ belong here.
 ### Long-term episodic memory across sessions
 
 The Claude Code memory at
-`~/.claude/projects/-Users-lfinger-Lutz-Dev/memory/` is Claude
+`~/.claude/projects/<encoded-project-path>/memory/` is Claude
 Code's OWN memory (operator preferences, project facts that I
 should remember across MY sessions). It is NOT SAI's memory. SAI
 runs on its own clock and has its own state — the two don't

@@ -424,7 +424,7 @@ class TestRegistry:
 
 class TestInternalDomainsConfig:
     def test_default_is_placeholder(self, monkeypatch):
-        # The PUBLIC default is example.com per principle #17 — operator
+        # The PUBLIC default is example.com per principle 17 — operator
         # must override in their private overlay. A real domain here
         # would leak operator identity into PUBLIC code.
         monkeypatch.delenv("SAI_INTERNAL_DOMAINS", raising=False)

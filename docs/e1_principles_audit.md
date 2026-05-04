@@ -35,7 +35,7 @@ Stage C.
 - Forwarded emails — operator's own address becomes the `from:`
   while the original (potentially non-Cornell) sender is buried in
   the body. The skill would treat the forward as a fresh request.
-- Display-name spoofing — `From: "Real Student" <attacker@bad.com>`
+- Display-name spoofing — `From: "Real Student" <attacker@example.org>`
 - Reply-To header attacks — `From:` is Cornell, `Reply-To:` redirects
   the auto-reply to attacker
 - No SPF / DKIM / DMARC validation — anyone with email-spoofing
@@ -125,7 +125,7 @@ Stage C, the runner switches to gate-then-send.
 | 4 | `outputs[].requires_approval: false` for `student_reply` with `propose_only` rights — internally inconsistent | loader hard contract | Set `requires_approval: true` until safety gate ships |
 | 5 | Hardcoded `BANA6070` in runner | generalizability + #14 | Infer course from email body via canonical courses memory |
 | 6 | Hardcoded "6 months" staleness | #16e (operator-tunable) | Read from `sai_runtime_tunables.yaml` |
-| 7 | Operator-specific values in skill (cornell.edu, BANA6070, lutzfinger) | #17 | Skill ships in private overlay only — no public template |
+| 7 | Operator-specific values in skill (institution domain, course code, owner handle) | #17 | Skill ships in private overlay only — no public template |
 | 8 | No `safety` cascade tier | #16f / #10 | Declare it in manifest; runner uses propose-only fallback until gate ships |
 
 ### G. Missing canonical memory
@@ -135,10 +135,10 @@ tools but had nowhere to read from. Without canonical course +
 TA data, the skill can't function.
 
 **Fix shipped:**
-- `~/Lutz_Dev/SAI/config/courses.yaml` (private) — operator's
+- `$SAI_PRIVATE/config/courses.yaml` (private) — operator's
   courses with late-work policy text + identifiers + current
   term + active dates
-- `~/Lutz_Dev/SAI/config/teaching_assistants.yaml` (private) —
+- `$SAI_PRIVATE/config/teaching_assistants.yaml` (private) —
   TA roster with name, email, course, active terms,
   last_verified date
 - `app/canonical/courses.py` (public — mechanism) — Pydantic
@@ -170,7 +170,7 @@ subject if present, else generic).
 
 ## Decisions (operator review)
 
-1. **Skill placement:** `~/Lutz_Dev/SAI/skills/cornell-delay-triage/`
+1. **Skill placement:** `$SAI_PRIVATE/skills/cornell-delay-triage/`
    (private overlay). NO public template — operator-specific only.
 2. **Canonical memory:** new private files `config/courses.yaml`,
    `config/teaching_assistants.yaml`. Loaders in public.
@@ -303,7 +303,7 @@ is never acceptable.
 ### Change 3 — Live test on 2026-05-04 → 4 ground-truth cases
 
 Operator ran the cascade against 3 real student emails from
-`testcornellstudenttest@gmail.com`. Three were misclassified by
+a test student gmail address. Three were misclassified by
 the LLM:
 
 - `mmmm` body saying "I am late on unit 3" → Haiku classified
