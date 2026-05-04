@@ -1,0 +1,104 @@
+# LLM registry — per PRINCIPLES.md §24b.
+#
+# Maps LOGICAL ROLES (what the code asks for) to concrete (vendor, model)
+# choices. Code references roles like ``agent_default`` — never literal
+# model ids. Switching providers / models is a YAML edit + restart.
+#
+# Tier semantics (per #24b):
+#   low      — cheapest acceptable (e.g. claude-haiku-4-5)
+#   medium   — local model preferred (e.g. qwen2.5:7b via Ollama)
+#   high     — best available (e.g. claude-sonnet-4-6, gpt-5)
+#
+# Editable ONLY via Claude Code (per #16e channel-allowed-discussion;
+# this file is high-risk and stays off Slack/web).
+
+version: "2026-05-03"
+
+# ── Default tier policy by role ───────────────────────────────────────
+# Each entry: vendor + model + tier + optional cost cap hint.
+
+roles:
+
+  # Human-facing interactive (sai-eval agent today; future sai-cost,
+  # sai-metrics, web chat). Per #24b: default CLOUD MEDIUM —
+  # operators wait for replies, latency + quality matter more than cost.
+  agent_default:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "Default for human-facing interactive agents. Cheap + fast tool-calling."
+
+  # When agent_default isn't enough — escalate to high-tier reasoning.
+  # Reserved for hard cases (long context, multi-step reasoning,
+  # ambiguous intent that low tier mis-routed).
+  agent_high:
+    vendor: anthropic
+    model: claude-sonnet-4-5-20250929
+    tier: high
+    description: "Escalation tier for agents when low-tier accuracy is insufficient."
+
+  # Cascade local tier — first-pass for cron-fired classification.
+  # Free runtime cost; escalates to cascade_cloud on uncertainty.
+  cascade_local:
+    vendor: ollama
+    model: qwen2.5:7b
+    tier: medium
+    description: "Local LLM cascade tier. Free; runs first on every classification."
+
+  # Cascade cloud tier — when local abstains or low confidence.
+  # Per #16c cloud is the runtime tiebreaker, never silent ground truth.
+  cascade_cloud:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "Cloud LLM cascade tier. Tiebreaker against local; verdict logged."
+
+  # Safety gate — second-opinion on `medium` risk-class outputs.
+  # Per #24b: medium = local. No tools; verdict-only {allow,escalate,refuse}.
+  safety_gate_medium:
+    vendor: ollama
+    model: qwen2.5:7b
+    tier: medium
+    description: "Watchdog for medium-risk-class workflow outputs. Local model."
+
+  # Safety gate — second-opinion on `high` risk-class outputs.
+  # Per #24b: high = cloud. Smallest correct scope (#19) — only this
+  # surface uses it.
+  safety_gate_high:
+    vendor: anthropic
+    model: claude-sonnet-4-5-20250929
+    tier: high
+    description: "Watchdog for high-risk-class workflow outputs. Cloud HIGH."
+
+  # Cost dashboard agent — natural-language query over cost SQL.
+  cost_dashboard_query:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "sai-cost channel agent. Read-only; SQL-backed; cheap."
+
+  # Metrics dashboard agent — natural-language query over eval metrics.
+  metrics_dashboard_query:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "sai-metrics channel agent. Read-only; SQL-backed; cheap."
+
+  # e1 cornell-delay-triage classifier — exception/no_exception/escalate.
+  # Cheap because the task is a 3-way classification, not free-form
+  # generation. Output is structured JSON consumed by the runner.
+  cornell_delay_classifier:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "e1 skill classifier. Triages student extension requests."
+
+  # e1 reply drafter — generates the SAI-authored reply body for the
+  # no_exception path. Higher quality than the classifier because the
+  # output is operator-visible (and ultimately student-facing). Still
+  # gets the second-opinion gate before send.
+  cornell_delay_reply_drafter:
+    vendor: anthropic
+    model: claude-haiku-4-5-20251001
+    tier: low
+    description: "e1 skill reply drafter. Generates the policy-quoting reply body."

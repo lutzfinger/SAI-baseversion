@@ -1,0 +1,85 @@
+# Channel allowed-discussion registry — per PRINCIPLES.md §16i.
+#
+# Each guarded interface (Slack channel today; future HTTP / web)
+# declares what topics it can discuss + what risk class each topic
+# carries. The bot looks up the channel in this registry on EVERY
+# message before invoking any tool. Topics not in the allowlist get
+# a friendly refusal (per #16e — never silent).
+#
+# Default for new channels: allowed_topics: [] — refuse everything
+# until the operator explicitly adds entries.
+#
+# Editable ONLY via Claude Code (per #16e — high-risk surface, off
+# Slack/web). Boundary linter catches accidental real channel names
+# leaking into the public template.
+#
+# ── Risk classes (drive gating policy) ────────────────────────────
+#   minimal    — read-only; no second-opinion gate
+#   low        — propose-only with two-phase commit; existing apply gate
+#   medium     — propose-only + second-opinion gate (#16f) on local LLM
+#   high       — propose-only + second-opinion gate on cloud LLM + operator approval
+#   forbidden  — explicitly NOT allowed; refuse + log
+
+version: "2026-05-03"
+
+channels:
+
+  # The current operator-feedback channel for Loop 4 + Loop 2 batch
+  # asks. Hosts the sai-eval agent + the cornell-delay-triage
+  # approval flow (operator ✅/❌ on staged reply proposals).
+  sai-eval:
+    description: "Operator-driven taxonomy + LLM eval feedback + e1 approvals"
+    allowed_topics:
+      - kind: classifier_rule_change
+        risk_class: low
+        tools:
+          - propose_classifier_rule
+        description: "Add or remove a sender→bucket classifier rule"
+      - kind: llm_example_addition
+        risk_class: low
+        tools:
+          - propose_llm_example
+          - search_gmail
+          - read_message
+          - read_thread
+        description: "Add a one-off LLM teaching example for a specific email"
+      - kind: query_label_state
+        risk_class: minimal
+        tools:
+          - list_gmail_labels
+        description: "Read-only query of which Gmail labels currently exist"
+      - kind: cornell_delay_approval
+        risk_class: high
+        tools:
+          - apply_label
+          - send_approved_reply
+          - archive_thread
+        description: "Operator ✅/❌ on a staged cornell-delay-triage reply proposal. High risk: approval triggers an outbound email."
+
+  # PLACEHOLDER — will host the sai-cost dashboard agent. Reserved
+  # NOW so adding it later is just enabling, not designing-from-scratch.
+  sai-cost:
+    description: "Cost reporting + budget queries (read-only)"
+    allowed_topics:
+      - kind: cost_query
+        risk_class: minimal
+        tools:
+          - read_audit_log
+          - format_cost_report
+        description: "Read-only cost report query (per workflow / per day / per provider)"
+
+  # PLACEHOLDER — will host the sai-metrics dashboard agent.
+  sai-metrics:
+    description: "Eval / regression / quality metrics (read-only)"
+    allowed_topics:
+      - kind: metric_query
+        risk_class: minimal
+        tools:
+          - read_audit_log
+          - read_eval_metrics
+          - format_report
+        description: "Read-only metric query (P/R, regression status, dataset health)"
+
+# New channels added below. Until an entry exists here, the bot
+# refuses every message on that channel — even if the operator types
+# in it. This is the fail-closed default for #16i.

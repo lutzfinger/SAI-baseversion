@@ -1,265 +1,279 @@
-# SAI Baseversion
+# SAI — Stack of AI for personal automation
 
-SAI Baseversion is a small starter repo for building governed agent workflows
-with a narrow, shareable surface area.
+SAI is an open framework for running your personal AI automations on
+your own machine, with **eval data as First Citizen**, not the chat log.
 
-The starter keeps a few core principles:
+## Are you frustrated with personal AI agents?
+I am. I want to develop my agents as easy as I can chat with Claude. But once I am happy. 
+I want to rely on this agent and know that it learns and does not regress. 
 
-- prompts, policies, and workflows live outside application code
-- policy and approval enforcement stay in the control plane
-- audit logs and learning datasets are append-only
-- connector scopes stay narrow
-- write actions are explicit and reviewable
+## What a real personal-agent system needs
 
-## Quickstart with Docker (no Python or Ollama install needed)
+Three things:
 
-The fastest way to try SAI on a fresh machine is the included
-`docker-compose.yml`. It runs the control plane and Ollama as separate
-containers, networked together. You only need Docker installed.
+1. **Workflow completion.** The system should measure whether the
+   *job* was actually done, not just whether the tool ran.
+2. **Outcome evals.** Approvals, edits, rejections, and overrides
+   should become structured feedback.
+3. **Separation between design and execution.** The entity that
+   *designs* the workflow should not be the only entity *judging*
+   whether it succeeded.
+
+This is why we built SAI.
+
+SAI started two years ago as a RAG version of myself for my Cornell
+course. It helped students code, discuss ideas, and work through
+course material. Since then, we have been turning it into the
+framework I kept wishing existed.
+
+The idea is simple:
+
+- Use **Claude Co-Work** (or another flexible interface) to
+  *design* the skill.
+- When the workflow is ready, hand it to **SAI**.
+- SAI runs it, tracks the outcomes, stores the evals, and comes
+  back to discuss quality and improvements.
+
+The flexible system helps you design. SAI helps you execute,
+observe, evaluate, and improve.
+
+We just launched it in our Cornell & INSEAD workshops. It is early. It will
+break. But it is built around the problem I think matters most:
+not better prompts, not prettier workflows — **better completion
+loops.**
+
+Try SAI connect it. Define your personal workflow via Claude and then let SAI scale it up.
+Tell me what you think:
+[github.com/lutzfinger/SAI-baseversion](https://github.com/lutzfinger/SAI-baseversion).
+
+---
+
+## Why SAI exists
+
+Every interaction with an AI agent is a labeled training example
+waiting to happen — approve, edit, reject, rewrite. Most personal-AI
+tools throw it away the moment you close the window.
+
+SAI treats **eval as a first-class citizen**. Every workflow that
+plugs into SAI inherits cascade execution + an eval contract +
+policy gates + an append-only audit log. A workflow that doesn't
+declare its eval datasets cannot ship through the framework. That
+is the regression-free guarantee.
+
+### The trust property
+
+In any delegated system the actor and the checker cannot be the
+same entity. When you delegate to AI, the actor is a model running
+under your name. The checker is you, occasionally. The eval data
+and the audit log are the bridge between those two roles.
+
+## What ships
+
+- **Cascade execution.** rules → classifier → local LLM → cloud LLM
+  → human. Early-stop on confidence; expensive tier is the long
+  tail, not the default. Build-time the cascade goes the other way:
+  new tasks start at cloud LLM and graduate downward as eval data
+  accumulates, every graduation human-approved on P/R against
+  ground truth.
+- **EvalDataset abstraction**, five concrete subclasses today:
+  - `CanaryDataset` — one synthetic case per rule, hard-fail on miss
+  - `EdgeCaseDataset` — real cases the LLM had to reason on,
+    soft-capped (default 50) to force curation
+  - `WorkflowDataset` — catches drift in a workflow's plumbing
+    (system prompt, regex, tool wiring)
+  - `DisagreementDataset` — local-vs-cloud disagreements awaiting
+    batched operator triage
+  - `TrueNorthDataset` — uncapped historical record, run weekly
+    with a hard cost cap
+- **Skill plug-in protocol.** Every workflow ships as a `skill.yaml`
+  manifest declaring identity, trigger, cascade, tools, eval,
+  feedback channel, outputs, policy. Validates at load time;
+  framework refuses to register a skill missing any of the three
+  required eval kinds.
+- **Public framework, private overlay.** The mechanism is open and
+  shareable; the values (taxonomies, prompts, channel names, OAuth
+  tokens, eval data) stay yours. Two repos. Runtime merges them at
+  startup with file-level override (no per-key YAML merging — that
+  silently changes behavior).
+- **Policy gate before every side effect.** Workers don't decide
+  their own permissions. The gate reads YAML.
+- **Per-workflow OAuth scopes.** `gmail.readonly` for the
+  classifier, `gmail.modify` for the labeler, `gmail.send` only
+  for senders. No superuser token shared across the system.
+- **Reality-only ground truth.** Tier predictions never count as
+  ground truth. Even a unanimous cascade leaves
+  `is_ground_truth=False` until reality confirms (direct user
+  action, explicit Slack reply, co-work session approval). Models
+  agreeing with each other is not signal.
+- **Append-only audit.** Every gate decision, connector call,
+  approval transition, verification failure writes one JSONL row.
+  The answer to "what did the system do this week" lives in one
+  place.
+- **Hash-verified loading.** SHA-256 every merged file, fail closed
+  on mismatch. When you see "workflow X had 87% pass rate in March"
+  you know workflow X was the same file all month.
+- **Reflection may suggest, never auto-apply.** The system can
+  propose prompt revisions based on eval data. It cannot apply
+  them. The design surface (Co-Work) and the execution surface
+  (Claude Code + the running daemon) are separated by a hash and a
+  check-in (#33b).
+- **sai-eval Slack agent.** Operator-tunable feedback channel.
+  Type `add rule: <sender> → <bucket>` or
+  `<message-ref> should be <bucket>`; the bot stages a proposal,
+  you react ✅ to apply.
+
+## Quick start for strangers
+
+Two paths.
+
+### Wizard-guided (recommended)
 
 ```sh
-git clone <this repo>
-cd SAI-baseversion
-make compose-up                # builds the SAI image, pulls Ollama, starts both
-make compose-pull-model        # pulls qwen2.5:7b into the Ollama container
-open http://localhost:8000     # control-plane dashboard
+git clone https://github.com/lutzfinger/SAI-baseversion ~/SAI-baseversion
+cd ~/SAI-baseversion
 ```
 
-To stop:
+Open Claude Code or Co-Work, paste the contents of
+[docs/onboarding_wizard_prompt.md](docs/onboarding_wizard_prompt.md)
+as the first message. The wizard walks you from zero → "first email
+tagged" in a single ~30-min session: detects your platform, picks a
+secret backend (1Password / Keychain / literal `.env`), wires Gmail
+OAuth, defines your first L1 taxonomy, runs a smoke test on 5 real
+emails, optionally installs a launchd cron + the sai-eval Slack
+agent.
+
+End state: SAI tags your inbox automatically, with a feedback
+channel for taxonomy corrections.
+
+### Manual
+
+Need Python 3.12+ and (recommended) Ollama for the local LLM tier.
 
 ```sh
-make compose-down              # keeps named volumes (state, models)
+git clone https://github.com/lutzfinger/SAI-baseversion ~/SAI-baseversion
+cd ~/SAI-baseversion
+python3 -m venv .venv
+.venv/bin/pip install -e .
+cp .env.example .env       # then edit with your secret references
 ```
 
-To open a shell inside the running container for one-off scripts:
+Configure secrets in `~/.config/sai/runtime.env` (see
+[docs/onboarding_wizard_prompt.md](docs/onboarding_wizard_prompt.md)
+Q3 for the template). Run an interactive Gmail OAuth flow to mint
+the token. Define your taxonomy in
+`prompts/email/keyword-classify.md` (private overlay). Run the
+smoke test:
 
 ```sh
-make compose-shell             # bash inside the sai container
-# inside: python -m scripts.<script_name>
+.venv/bin/python -m scripts.backtest_email_classifier --limit 5 --dry-run
 ```
 
-Cloud LLM credentials and Slack tokens come in via your shell env or a
-`.env` file alongside `docker-compose.yml`. See `.env.example` for the
-full list. Operator overlay (private repo) integration is documented
-inline in `docker-compose.yml` — uncomment the volume mounts under the
-`sai` service and set `SAI_PRIVATE`.
+## Operator's day-to-day commands
 
-## Running directly on the host (faster development iteration)
-
-If you'd rather run on the host, ensure Python 3.12+ and Ollama are
-installed, then:
+Once installed, you mostly interact through Slack `#sai-eval` (or
+the local HTTP chat fallback at `http://127.0.0.1:8765`). The
+command line is for occasional checks.
 
 ```sh
-make install                   # editable install + dev extras
-make dev                       # uvicorn on http://localhost:8000
+# Run the full regression suite (cascade + canonical loaders + skills)
+bash scripts/run_regression_suite.sh
+
+# Boundary linter — catches operator data leaking into public repo
+.venv/bin/python scripts/boundary_check.py
+
+# Cascade an email manually (dry-run)
+.venv/bin/python -m scripts.backtest_email_classifier --limit 10 --dry-run
+
+# Cost report for the last 7 days
+.venv/bin/python -m scripts.sai_cost --days 7
+
+# Eval pass-rate report
+.venv/bin/python -m scripts.sai_metrics
 ```
 
-## Included Workflows
+Slack `#sai-eval` accepted patterns:
 
-1. `newsletter-identification-gmail`
-   - reads Gmail messages
-   - classifies each message as `newsletter`, `general`, or `other`
-   - writes evaluation rows
-   - does not modify the mailbox
+- `add rule: <sender|domain> → L1/<bucket>` — adds a deterministic
+  rule. Stages a proposal; react ✅ to apply.
+- `<message_ref> should have been L1/<bucket>` — adds an LLM
+  teaching example (edge_cases). Stages a proposal; react ✅ to apply.
 
-2. `newsletter-identification-gmail-tagging`
-   - runs the same classification flow
-   - applies starter Gmail labels after classification
+Anything else gets a friendly out-of-scope reply listing the
+accepted patterns.
 
-3. `starter-email-interaction`
-   - reads operator emails sent to the configured SAI alias
-   - extracts safe document text from supported attachments
-   - replies with an answer, a follow-up question, or an approval-backed plan
-   - can execute a bounded action only after approval
+## Building a new workflow
 
-## Repo Layout
+Skills are designed in **Co-Work** through back-and-forth with you,
+then handed to **Claude Code** for execution (#33b — Co-Work
+designs, Claude Code executes; no design changes happen in Claude
+Code).
 
-- `app/control_plane`
-  - workflow orchestration, policy enforcement, and run execution
-- `app/connectors`
-  - Gmail and Slack integrations
-- `app/workers`
-  - the newsletter classifier worker and the email interaction worker
-- `app/learning`
-  - evaluation datasets and reusable fact memory
-- `app/observability`
-  - audit logging, run storage, and task tracking
-- `registry`
-  - tool, task-kind, and effect-class metadata
-- `workflows`
-  - checked-in workflow definitions
-- `policies`
-  - checked-in connector and approval policies
-- `prompts`
-  - checked-in prompts and prompt locks
+1. Open Co-Work. Paste
+   [docs/cowork_skill_creator_prompt.md](docs/cowork_skill_creator_prompt.md)
+   as the system prompt.
+2. Walk through the skill-creator's Q1–Q9. It emits four files:
+   `skill.yaml`, `canaries.jsonl`, `edge_cases.jsonl`,
+   `workflow_regression.jsonl`, plus a `runner.py` skeleton.
+3. Drop the emitted directory at
+   `$SAI_PRIVATE/skills/incoming/<draft_id>/`.
+4. Hand to Claude Code: it runs `validate_skill_manifest`, hashes
+   any new prompts, then promotes to
+   `$SAI_PRIVATE/skills/<workflow_id>/` once green.
+5. Re-merge the overlay (`make overlay-merge`); the running bot
+   picks up the new skill on next reload.
 
-## Running Locally
+The framework refuses to register a skill that doesn't declare all
+three required eval datasets (canaries + edge_cases + workflow).
+That's #16d.
 
-Start the API:
+## Repo layout
 
-```bash
-uvicorn app.main:app --reload
-```
+| Path | What |
+|---|---|
+| `app/cascade/` | Public framework cascade runner — handler registry, `run_cascade`, audit log |
+| `app/canonical/` | Reusable canonical-memory loaders (courses, TAs, sender_validation, crisis_patterns, text_sanitization, reply_validation, patterns) |
+| `app/llm/providers/` | Vendor-agnostic Provider abstractions (Anthropic JSON + Messages, OpenAI Responses, Gemini, Ollama) |
+| `app/llm/registry.py` + `config/llm_registry.yaml` | LLM registry — code references models by ROLE, never by literal model id |
+| `app/eval/` | EvalDataset abstraction + 5 concrete subclasses |
+| `app/skills/` | Skill plug-in protocol — `manifest.py` (Pydantic schema), `loader.py` (validator), `proposal_intake.py`, `sample_echo_skill/` (minimal valid example) |
+| `app/runtime/` | Overlay merge, hash-verified loader, AI stack tiers (incl. second-opinion gate) |
+| `app/agents/` | sai-eval Slack agent — bounded tool surface, `extra="forbid"` Pydantic input models |
+| `app/connectors/` | Gmail, Slack, calendar — narrow API scopes |
+| `app/control_plane/` | Policy enforcement + approvals |
+| `prompts/` | Hash-locked prompt files (loader fails closed on mismatch) |
+| `config/` | Operator-editable YAML (runtime tunables, channel registry, LLM registry) |
+| `eval/` | Public eval placeholders + a synthetic skill_creator regression — operator's real eval data is private |
+| `scripts/` | Boundary linter, regression suite, canary regenerator, OAuth helpers, cost + metrics CLIs |
+| `tests/` | Unit + integration tests (586 passing, 0 boundary violations) |
 
-Useful endpoints:
+## Principles + further reading
 
-```bash
-curl http://127.0.0.1:8000/api/healthz
-curl http://127.0.0.1:8000/api/workflows
-curl -X POST http://127.0.0.1:8000/api/workflows/newsletter-identification-gmail/run
-```
+- [PRINCIPLES.md](PRINCIPLES.md) — durable rules. Read this once
+  early to save a lot of confused debugging later.
+- [docs/architecture.md](docs/architecture.md) — system architecture
+- [docs/memory_architecture.md](docs/memory_architecture.md) — the
+  4-tier memory model
+- [docs/cowork_skill_creator_prompt.md](docs/cowork_skill_creator_prompt.md)
+  — paste-as-system-prompt for designing new skills in Co-Work
+- [docs/onboarding_wizard_prompt.md](docs/onboarding_wizard_prompt.md)
+  — paste-as-system-prompt for first install
 
-Optional helper commands:
+## Compatibility
 
-```bash
-make auth-newsletters
-make auth-newsletter-tags
-make auth-sai-email
-make run-newsletters
-make run-newsletter-tags
-make run-sai-email
-```
-
-## Onboarding
-
-This starter is meant to be wired up with local secrets in `.env` and
-policy-checked workflow config.
-
-Credential map:
-
-- Gmail: installed-app OAuth client plus local token files. No Google service
-  account is used in this starter.
-- Slack: bot token for controlled posts. No Slack service account concept is
-  used here.
-- OpenAI: API key for cloud classification and planning.
-- LangSmith: optional API key for tracing.
-- Ollama: local model host, no token required by default.
-
-Before you authenticate anything:
-
-1. Copy `.env.example` to `.env`.
-2. Set `SAI_USER_EMAIL` to your operator mailbox.
-3. Set `SAI_ALIAS_EMAIL` to the mailbox the starter should monitor for
-   `starter-email-interaction`.
-4. Replace the placeholder email allowlists in
-   `policies/starter_email_interaction.yaml`.
-5. Replace the placeholder Slack channel allowlist in
-   `policies/starter_email_interaction.yaml` if you plan to allow Slack posts.
-
-### Gmail OAuth
-
-Use a Google Cloud OAuth client for a desktop app. Do not create a Google
-service account for this repo. The current Gmail connector uses user-consented
-OAuth tokens and stores them locally under `logs/`.
-
-1. In Google Cloud, create or choose a project.
-2. Enable the Gmail API for that project.
-3. Configure the OAuth consent screen.
-4. Create an OAuth client ID for a desktop app.
-5. Download the client JSON and point `SAI_GMAIL_CREDENTIALS_PATH` at it in
-   `.env`.
-
-The repo also supports the advanced path of setting
-`SAI_GMAIL_CLIENT_ID` and `SAI_GMAIL_CLIENT_SECRET` directly, but the
-downloaded desktop client JSON is the easiest path.
-
-Then authenticate each Gmail workflow explicitly:
-
-```bash
-make auth-newsletters
-make auth-newsletter-tags
-make auth-sai-email
-```
-
-Those commands open a browser and write workflow-compatible token files under
-`logs/`. Leave `SAI_GMAIL_TOKEN_PATH` blank unless you deliberately want one
-shared token file. The workflows use different Gmail scopes, so separate token
-files are the safer default.
-
-Scope expectations:
-
-- `newsletter-identification-gmail`: `gmail.readonly`
-- `newsletter-identification-gmail-tagging`: `gmail.modify`
-- `starter-email-interaction`: `gmail.readonly` and `gmail.send`
-
-Advanced Gmail setup:
-
-- If you want non-interactive local runs, you can set
-  `SAI_GMAIL_REFRESH_TOKEN` together with `SAI_GMAIL_CLIENT_ID` and
-  `SAI_GMAIL_CLIENT_SECRET`.
-- The easiest way to obtain that refresh token is to run one interactive auth
-  flow first, then inspect the local token JSON that the repo writes under
-  `logs/`.
-
-### Slack
-
-Slack is only needed if you want approval-backed Slack posts from the
-`starter-email-interaction` workflow.
-
-1. Create a Slack app for your workspace.
-2. Add bot scopes that cover the actions you allow. For the current starter,
-   that usually means `chat:write`. If you want the repo to resolve a channel
-   by name instead of hard-coding a channel ID, also add the read scopes Slack
-   requires for the channel types you use, such as `channels:read` for public
-   channels and `groups:read` for private channels.
-3. Install the app to the workspace.
-4. Copy the bot token into `SAI_SLACK_BOT_TOKEN`.
-
-Optional Slack settings:
-
-- `SAI_SLACK_ALLOWED_USER_IDS` is only needed if you later allow direct
-  messages by policy.
-- `SAI_SLACK_APP_TOKEN` and `SAI_SLACK_SIGNING_SECRET` are not used by the
-  current starter because it does not run Slack Events or Socket Mode.
-
-### OpenAI
-
-Set `SAI_OPENAI_API_KEY` in `.env` for the cloud classifier and the starter
-email planner. If you are using an OpenAI-compatible endpoint, also set
-`SAI_OPENAI_BASE_URL`.
-
-### LangSmith
-
-LangSmith is optional.
-
-1. Create a LangSmith API key.
-2. Set `SAI_LANGSMITH_ENABLED=true`.
-3. Set `SAI_LANGSMITH_API_KEY`.
-4. Optionally set `SAI_LANGSMITH_PROJECT`,
-   `SAI_LANGSMITH_ENDPOINT`, and `SAI_LANGSMITH_WORKSPACE_ID`.
-
-### Local Ollama
-
-If you want the local classifier path, run Ollama locally and make sure
-`SAI_LOCAL_LLM_HOST` and `SAI_LOCAL_LLM_MODEL` match your local setup.
-
-## LangChain And LangSmith
-
-The starter now uses LangChain for structured LLM calls:
-
-- `ChatOllama` for the local classifier path
-- `ChatOpenAI` for cloud classification and email planning
-
-LangSmith tracing is opt-in and disabled by default. When enabled, model prompts,
-inputs, and outputs may be sent to LangSmith for debugging and observability.
-Configure it with the optional `SAI_LANGSMITH_*` settings in `.env.example`.
-
-## Design Notes
-
-- Registry says what exists.
-- Workflows say how the system is assembled.
-- Policies say what it is allowed to do.
-- The control plane enforces approvals and auditability.
-- Workers stay narrow and connectors stay bounded.
-
-## Docs
-
-- `docs/architecture.md`
-- `docs/system_inventory.md`
-- `CONTRIBUTING.md`
+- macOS first (uses `~/Library/Application Support/SAI/` paths +
+  launchd for cron). Linux works for development; cron + secret
+  paths need adjustment.
+- Python 3.12+
+- Optional: Ollama for the local LLM tier; 1Password CLI for
+  service-account secret resolution.
 
 ## Contributing
 
-Small fixes are welcome. For anything beyond a tiny docs or typo change, please
-open an Issue first so the contribution can be aligned on scope and direction
-before implementation.
+The framework (mechanisms) is the open part. Your taxonomy, prompts,
+channel names, secrets, eval data — those are yours, not the
+framework's. Keep operator data out of pull requests; the boundary
+linter (`scripts/boundary_check.py`) catches the obvious leaks.
+
+For anything beyond a tiny docs or typo change, please open an
+Issue first so the contribution can be aligned on scope and
+direction before implementation. See [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -27,12 +27,19 @@ from app.eval.record import Prediction
 
 
 class TierKind(StrEnum):
-    """The five recognized tier kinds, ordered cheapest → most expensive."""
+    """Recognized tier kinds, ordered cheapest → most expensive.
+
+    SECOND_OPINION is a watchdog tier (per principles 16f and 10)
+    inserted immediately before any side-effecting output. It does not
+    produce a Prediction the way classifier tiers do — it produces
+    a SecondOpinionVerdict over an upstream tier's proposed output.
+    """
 
     RULES = "rules"
     CLASSIFIER = "classifier"
     LOCAL_LLM = "local_llm"
     CLOUD_LLM = "cloud_llm"
+    SECOND_OPINION = "second_opinion"
     HUMAN = "human"
 
 
@@ -42,6 +49,7 @@ TIER_KIND_ORDER: tuple[TierKind, ...] = (
     TierKind.CLASSIFIER,
     TierKind.LOCAL_LLM,
     TierKind.CLOUD_LLM,
+    TierKind.SECOND_OPINION,
     TierKind.HUMAN,
 )
 

@@ -1,0 +1,4 @@
+{"case_id": "rule_positive_good", "input": "this is a good day", "expected": "positive"}
+{"case_id": "rule_positive_great", "input": "great work everyone", "expected": "positive"}
+{"case_id": "rule_negative_bad", "input": "that was a bad call", "expected": "negative"}
+{"case_id": "rule_negative_terrible", "input": "terrible weather", "expected": "negative"}

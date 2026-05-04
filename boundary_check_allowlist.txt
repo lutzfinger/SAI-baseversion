@@ -42,13 +42,25 @@ PRINCIPLES.md
 # enforcement targets (/Users/..., personal strings) — so it has to
 # mention them by name to explain the rules.
 
-MIGRATION-PRINCIPLES.md
-# The current migration cycle's plan. References private repo paths
-# (Lutz_Dev/SAI) when describing the per-task migration steps, since
-# the migration is concretely from that path to the merged runtime.
-# Replaceable per cycle; always tagged with date.
-
 SUPPLIERS.md
 # References `op://` and `keychain://` schemes inside the
 # 1Password / macOS Keychain table rows as legitimate documentation
 # of the secret-resolution patterns themselves (not actual references).
+
+README.md
+# Public README. References the canonical public repo URL
+# (github.com/lutzfinger/SAI-baseversion) — that's the project's
+# public identity, documented in PRINCIPLES.md and the public
+# article series. Also references `$SAI_PRIVATE` as a placeholder
+# for the operator's private overlay path.
+
+docs/onboarding_wizard_prompt.md
+# Onboarding wizard prompt for stranger installs. References
+# canonical SAI channel names (#sai-eval) and the canonical public
+# repo URL.
+
+docs/cowork_skill_creator_prompt.md
+# Skill-creator prompt for Co-Work. References canonical SAI
+# channel names (#sai-eval) and example skill paths in the
+# operator's overlay (Lutz_Dev/SAI/skills/) as concrete examples
+# of the canonical layout.

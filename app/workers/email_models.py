@@ -18,8 +18,13 @@ from app.tools.models import ToolExecutionRecord
 #             list as `# CUSTOMIZE`; this Literal must stay aligned with it.
 #   Level 2 — intent. Universal vocabulary, rarely changed.
 #
-# `other` and `others` are unresolved fallbacks: they keep the email in inbox
-# and produce no L1/L2 label.
+# `no_label` is the explicit "I have no clear category" bucket. Per the
+# operator's N1 decision (2026-05-02): instead of producing NO L1 label
+# (the old `other` semantic), the cascade applies a real L1/no_label
+# Gmail label so the operator can see the email was processed and stayed
+# in inbox without being assigned a clear category. Going forward; old
+# `other`-tagged emails are NOT re-tagged ("no backwards filling").
+# `others` (level 2) is the generic L2 fallback — same role at L2.
 Level1Classification = Literal[
     "customers",
     "partners",
@@ -29,7 +34,7 @@ Level1Classification = Literal[
     "finance",
     "newsletters",
     "updates",
-    "other",
+    "no_label",
 ]
 Level2Intent = Literal[
     "informational",
@@ -46,6 +51,7 @@ LEVEL1_DISPLAY_NAMES: dict[str, str] = {
     "finance": "Finance",
     "newsletters": "Newsletters",
     "updates": "Updates",
+    "no_label": "no_label",
 }
 
 LEVEL2_DISPLAY_NAMES: dict[str, str] = {
@@ -228,10 +234,16 @@ def all_taxonomy_gmail_label_names() -> list[str]:
 
 
 def gmail_level1_label_name(level1_classification: Level1Classification) -> str | None:
-    """Return the Gmail label for a resolved L1 classification, or None for fallbacks."""
+    """Return the Gmail label for a resolved L1 classification.
 
-    if level1_classification in {"newsletters", "other"}:
-        return None
+    Per operator decisions 2026-05-02 (N1 + newsletters parallel):
+    every L1 classification — including ``no_label`` and
+    ``newsletters`` — produces a real Gmail label so the operator
+    can see what the cascade did. Returns None only when the bucket
+    isn't in PRIMARY_LABELS (defensive; shouldn't happen for valid
+    Level1Classification values).
+    """
+
     return PRIMARY_LABELS.get(level1_classification)
 
 

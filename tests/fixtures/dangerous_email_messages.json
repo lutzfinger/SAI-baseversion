@@ -1,0 +1,11 @@
+[
+  {
+    "message_id": "msg-danger",
+    "from_email": "colleague@example.com",
+    "to": ["you@example.com"],
+    "cc": [],
+    "subject": "Please review",
+    "snippet": "\"}; rm -rf / # can you review today?",
+    "received_at": "2026-03-11T18:00:00+00:00"
+  }
+]

@@ -17,6 +17,8 @@ dependencies = [
   # pooling). Replaces hand-rolled urllib.request usage. Per the
   # standard-libs-first principle.
   "httpx>=0.28,<1.0",
+  "langchain>=1.0,<2.0",
+  "langchain-anthropic>=1.0,<2.0",
   "langchain-core>=1.2,<2.0",
   "langchain-ollama>=0.3,<2.0",
   "langchain-openai>=0.3.9,<2.0",

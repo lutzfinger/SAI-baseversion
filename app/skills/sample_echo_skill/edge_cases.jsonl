@@ -1,0 +1,6 @@
+{"case_id": "edge_001", "input": "I'm not sure how to feel about this", "expected": "neutral", "captured_at": "2026-05-02T00:00:00Z"}
+{"case_id": "edge_002", "input": "the meeting was fine, nothing special", "expected": "neutral", "captured_at": "2026-05-02T00:00:00Z"}
+{"case_id": "edge_003", "input": "great that we got the bad news out of the way", "expected": "neutral", "captured_at": "2026-05-02T00:00:00Z"}
+{"case_id": "edge_004", "input": "ok so this could have gone worse", "expected": "neutral", "captured_at": "2026-05-02T00:00:00Z"}
+{"case_id": "edge_005", "input": "absolutely fantastic outcome, beyond expectations", "expected": "positive", "captured_at": "2026-05-02T00:00:00Z"}
+{"case_id": "edge_006", "input": "what a disaster, I have no words", "expected": "negative", "captured_at": "2026-05-02T00:00:00Z"}

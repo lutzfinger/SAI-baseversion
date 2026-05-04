@@ -13,15 +13,50 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
-from typing import Any
+from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.llm.cost import CostTable, get_default_cost_table
 from app.llm.provider import LLMProviderError, LLMRequest, LLMResponse, TokenUsage
 
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+
+# --- Response shape validation per principle 6a ---------------------------------
+# Network response. `extra="ignore"` allows Gemini API growth without
+# breaking us; we validate the fields we depend on are present + typed.
+
+class _GeminiPart(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    text: Optional[str] = None
+
+
+class _GeminiContent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    parts: list[_GeminiPart] = Field(default_factory=list)
+
+
+class _GeminiCandidate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    content: Optional[_GeminiContent] = None
+
+
+class _GeminiUsageMetadata(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    promptTokenCount: Optional[int] = 0
+    candidatesTokenCount: Optional[int] = 0
+    cachedContentTokenCount: Optional[int] = 0
+
+
+class _GeminiResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    candidates: list[_GeminiCandidate] = Field(default_factory=list)
+    usageMetadata: Optional[_GeminiUsageMetadata] = None
+    modelVersion: Optional[str] = None
 
 
 class GeminiProvider:
@@ -78,7 +113,7 @@ class GeminiProvider:
         started = perf_counter()
         try:
             with urlopen(req, timeout=self.timeout_seconds) as response:  # noqa: S310
-                payload = json.loads(response.read().decode("utf-8"))
+                raw_payload = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, OSError, json.JSONDecodeError) as exc:
             raise LLMProviderError(
                 f"Gemini request failed: {exc}",
@@ -86,6 +121,15 @@ class GeminiProvider:
                 model=self.model,
             ) from exc
         latency_ms = int((perf_counter() - started) * 1000)
+
+        try:
+            payload = _GeminiResponse.model_validate(raw_payload)
+        except ValidationError as exc:
+            raise LLMProviderError(
+                f"Gemini response failed schema validation: {exc}",
+                provider_id=self.provider_id,
+                model=self.model,
+            ) from exc
 
         raw_text = _extract_text(payload)
         if not raw_text:
@@ -104,7 +148,7 @@ class GeminiProvider:
             ) from exc
 
         usage = _extract_usage(payload)
-        model_used = str(payload.get("modelVersion") or self.model)
+        model_used = str(payload.modelVersion or self.model)
         cost = self._cost_table.cost_for(
             provider_id=self.provider_id, model=model_used, usage=usage
         )
@@ -145,29 +189,25 @@ def _strip_unsupported_keys(node: Any) -> Any:
     return node
 
 
-def _extract_text(payload: dict[str, Any]) -> str:
+def _extract_text(payload: _GeminiResponse) -> str:
     """First candidate's first text part. Gemini may include several candidates;
     we take the first one — the model picks ranked order."""
 
-    candidates = payload.get("candidates") or []
-    for candidate in candidates:
-        content = candidate.get("content") or {}
-        for part in content.get("parts") or []:
-            text = part.get("text")
-            if text:
-                return str(text).strip()
+    for candidate in payload.candidates:
+        if candidate.content is None:
+            continue
+        for part in candidate.content.parts:
+            if part.text:
+                return part.text.strip()
     return ""
 
 
-def _extract_usage(payload: dict[str, Any]) -> TokenUsage:
-    raw = payload.get("usageMetadata") or {}
-
-    def _read(name: str) -> int:
-        value = raw.get(name)
-        return int(value) if isinstance(value, int) else 0
-
+def _extract_usage(payload: _GeminiResponse) -> TokenUsage:
+    raw = payload.usageMetadata
+    if raw is None:
+        return TokenUsage(input_tokens=0, output_tokens=0, cached_input_tokens=0)
     return TokenUsage(
-        input_tokens=_read("promptTokenCount"),
-        output_tokens=_read("candidatesTokenCount"),
-        cached_input_tokens=_read("cachedContentTokenCount"),
+        input_tokens=raw.promptTokenCount or 0,
+        output_tokens=raw.candidatesTokenCount or 0,
+        cached_input_tokens=raw.cachedContentTokenCount or 0,
     )

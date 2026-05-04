@@ -1,0 +1,11 @@
+[
+  {
+    "message_id": "msg-low",
+    "from_email": "someone@example.com",
+    "to": ["team@example.com"],
+    "cc": [],
+    "subject": "Quick note",
+    "snippet": "Passing this along for visibility.",
+    "received_at": "2026-03-11T18:00:00+00:00"
+  }
+]

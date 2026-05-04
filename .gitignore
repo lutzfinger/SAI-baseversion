@@ -1,4 +1,9 @@
 .venv/
+# Operator-specific terms for the boundary linter (PRINCIPLES.md §24a + §17).
+# Holds private contact names, private bucket names, operator-specific
+# domains. Never committed; loaded by scripts/boundary_check.py to catch
+# narrative leaks even in allowlisted markdown files.
+boundary_check_private_terms.txt
 __pycache__/
 .pytest_cache/
 .mypy_cache/

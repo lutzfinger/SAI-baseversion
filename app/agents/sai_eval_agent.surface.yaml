@@ -1,0 +1,196 @@
+workflow_id: slack-eval-agent
+version: "2"
+description: |
+  Execution plane behind #sai-eval. Cascade pattern: regex parser tier
+  first (cheap, deterministic), LLM agent tier when regex abstains. The
+  agent has a guarded tool surface — read-only Gmail tools + propose-only
+  tools that stage YAML for the existing two-phase commit. The agent
+  cannot mutate state directly.
+
+  Triggered by: top-level message in #sai-eval from the configured operator.
+
+# Per principle #24a (Open framework, single API surface):
+framework: langchain
+provider: anthropic
+default_model: claude-haiku-4-5-20251001
+fallback_models: [claude-sonnet-4-6]
+
+worker: slack_bot
+connector: gmail_api
+policy: slack_eval_agent.yaml
+
+cascade:
+  - tier_id: rules
+    description: |
+      Regex parsers in app/eval/operator_patterns.py — match the canonical
+      patterns instantly with no LLM call.
+    handles:
+      - "add rule: <sender|domain> → <label>"
+      - "<sender|domain> should be <label>"
+    abstain_on:
+      - free-form / conversational text
+      - bucket name not in current Gmail labels
+      - subject-substring or thread-id references
+
+  - tier_id: llm_agent
+    description: |
+      LangChain create_agent + ChatAnthropic. Receives the operator's
+      message + the tool surface + a system prompt. Caps at
+      MAX_ITERATIONS to prevent runaway loops; recursion_limit set to
+      MAX_ITERATIONS * 2 in the LangChain config.
+    handles:
+      - "the mail about X should be <label>"
+      - "<freetext> should be <label>"
+      - conversational off-topic
+      - "I want a new label Z"
+      - thread-context cases (first external sender lookup)
+    abstain_on:
+      - persistent tool failures (escalate to operator)
+      - iteration cap reached (8 steps)
+
+# Tool surface — exhaustive list. Adding a tool requires editing this
+# file AND wiring it in app/agents/tools.py.
+tools:
+  - tool_id: search_gmail
+    rights: read_only
+    blast_radius: |
+      Reads at most max_results (default 5) Gmail message metadata via
+      the configured gmail.readonly OAuth scope. No mutation.
+    inputs:
+      query: "Gmail search query (any normal Gmail syntax)"
+      max_results: "int (1-10, default 5)"
+    outputs:
+      candidates: "list of {message_id, thread_id, from, subject, snippet, received_at}"
+    input_check: "query bounded to 256 chars; max_results capped at 10"
+    output_check: "snippet truncated to 200 chars per candidate"
+
+  - tool_id: read_message
+    rights: read_only
+    blast_radius: "Reads ONE Gmail message body excerpt. Bounded fetch."
+    inputs:
+      message_id: "Gmail message id"
+    outputs:
+      message: "{message_id, thread_id, from, to, subject, snippet, body_excerpt, received_at}"
+    input_check: "message_id format validated"
+    output_check: "body_excerpt truncated to 2000 chars"
+
+  - tool_id: read_thread
+    rights: read_only
+    blast_radius: |
+      Reads up to MAX_THREAD_MESSAGES (25) messages in one Gmail thread.
+      Returns each message + a flag identifying the FIRST EXTERNAL one.
+      Critical for the operator's classification convention (L1 keyed
+      off first-sender-not-in-internal-domains).
+    inputs:
+      thread_id: "Gmail thread id"
+    outputs:
+      messages: "list of {index, message_id, from, subject, snippet, is_external}"
+      first_external_index: "int or null"
+      first_external_message_id: "str or null"
+      internal_domains: "list (from SAI_INTERNAL_DOMAINS env)"
+    input_check: "thread_id format validated; max 25 messages"
+    output_check: "messages sorted oldest-first"
+
+  - tool_id: list_gmail_labels
+    rights: read_only
+    blast_radius: |
+      Reads operator's Gmail labels via Gmail API. Returns ANY label
+      (no L1/* prefix gating per operator decision 2026-05-02). System
+      labels (INBOX, SENT, etc.) filtered out.
+    inputs:
+      contains: "optional case-insensitive substring filter"
+    outputs:
+      labels: "list of label names (any prefix)"
+    input_check: "contains bounded to 64 chars"
+    output_check: "system labels excluded"
+
+  - tool_id: propose_classifier_rule
+    rights: propose_only
+    blast_radius: |
+      Writes ONE staged proposal YAML to eval/proposed/. On apply
+      (operator ✅), the rules YAML (keyword-classify.md) gets the
+      new sender→bucket mapping AND eval/canaries.jsonl is regenerated
+      so the new rule has its own regression test.
+    target_system: classifier_rules
+    eval_dataset_to_update: canaries
+    inputs:
+      target: "sender email or domain"
+      target_kind: "sender_email or sender_domain"
+      label: "Gmail label (any label, must exist)"
+      why: "one-sentence rationale"
+    outputs:
+      proposal_id: "string"
+      staged_path: "string"
+      operator_message: "string"
+    input_check: "label verified against current Gmail labels"
+    output_check: "proposal_id matches /^rule_add::/"
+
+  - tool_id: propose_llm_example
+    rights: propose_only
+    blast_radius: |
+      Writes ONE staged proposal YAML to eval/proposed/. On apply
+      (operator ✅), edge_cases.jsonl gets one new EdgeCaseRow and
+      the LLM regression runs against the updated edge_cases set.
+    target_system: llm_classifier
+    eval_dataset_to_update: edge_cases
+    inputs:
+      message_id: "Gmail message id (use first_external_message_id from read_thread for thread cases)"
+      label: "Gmail label (must exist)"
+      why: "why this is the right teaching example"
+    outputs:
+      proposal_id: "string"
+      staged_path: "string"
+      operator_message: "string"
+    input_check: "label verified; message_id format-checked"
+    output_check: "proposal_id matches /^eval_add::/"
+
+# Agent supervisory layer — applies between handoffs.
+supervisory:
+  iteration_cap: 8
+  recursion_limit: 16
+  audit_log: |
+    ~/Library/Logs/SAI/sai_eval_agent.jsonl — one row per invocation.
+    Captures input, all tool calls, final text, cost_usd, iterations,
+    terminated_reason, model_used, tool_specs.
+  hard_refusals_in_system_prompt:
+    - "off-topic input → friendly refuse + redirect (no jokes, no trivia)"
+    - "label not in Gmail → tell operator to create it first"
+    - "thread reference → MUST use read_thread + first_external_message_id"
+    - "any state mutation outside propose_* tools"
+
+eval:
+  canaries: eval/canaries.jsonl
+  edge_cases: eval/edge_cases.jsonl
+  disagreement_queue: eval/disagreement_queue.jsonl
+
+env:
+  SAI_AGENT_MODEL:
+    default: "claude-haiku-4-5-20251001"
+    description: "Override the Claude model used by the agent."
+  ANTHROPIC_API_KEY:
+    required: true
+    description: "Operator's Claude API key (the same one Co-Work uses)."
+  SAI_INTERNAL_DOMAINS:
+    default: "example.com"
+    required_in_private: true
+    description: |
+      Comma-separated operator-internal email domains. Used by
+      read_thread to identify the first external sender. Operator
+      MUST override in their private overlay's runtime.env.
+
+deferred:
+  - id: agent_runner_tool_kind
+    note: |
+      Promote `agent_runner` to a registered tool kind so this surface
+      YAML can move to workflows/ proper. Currently lives in app/agents/.
+  - id: second_opinion_gate
+    note: |
+      Add an LLM supervisory call between agent's final propose and
+      Slack post. Not necessary while operator ✅ is the gate.
+  - id: prompt_addendum_propose
+    note: |
+      Add a third propose_* tool (`propose_prompt_addendum`) that writes
+      to local_llm_prompt_addendum.md.
+  - id: dynamic_taxonomy_in_cascade
+    note: |
+      Email cascade still uses static Level1Classification = Literal[...].

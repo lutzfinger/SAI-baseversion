@@ -20,6 +20,7 @@ def test_tier_kind_ordering_is_cheapest_to_most_expensive() -> None:
         TierKind.CLASSIFIER,
         TierKind.LOCAL_LLM,
         TierKind.CLOUD_LLM,
+        TierKind.SECOND_OPINION,
         TierKind.HUMAN,
     )
 

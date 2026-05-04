@@ -1,0 +1,63 @@
+# SAI runtime tunables — knobs the operator + Claude Code can adjust
+# WITHOUT changing code.
+#
+# Scope: ONLY editable via Claude Code (no Slack, no web, no other
+# surface). Per the "guarded interface" principle (#16e + the
+# channel-allowed-discussion principle to be added), runtime tunables
+# are a high-risk surface and stay off the broader-access channels.
+#
+# Format: shallow YAML map. New keys land here as a flat namespace;
+# nested sections only when there's a strong grouping. Values are
+# loaded by `app/shared/runtime_tunables.py` at process start.
+#
+# Add a brief inline comment explaining each key's effect + safe range.
+
+# ── Pending intents (#16g) ──────────────────────────────────────────
+intent_idle_timeout_hours: 96
+# How long a pending intent stays open without activity before
+# auto-expiring with a final operator-facing note. Per operator
+# 2026-05-03: 4 days (96h). Don't go below 24 (operators routinely
+# step away for a day); don't go above ~14 days (stale state risk).
+
+intent_max_history_events: 50
+# Cap on history events per intent so a runaway conversation doesn't
+# grow unbounded. Last N wins. Don't go below 10 (loses prior-attempts
+# context the agent needs).
+
+# ── Agent caps (PRINCIPLES.md §16f) ─────────────────────────────────
+agent_max_iterations: 8
+# Hard cap on tool-call rounds per agent invocation. Above this we
+# bail with a friendly "I got stuck" message. Don't go above 16
+# (cost + latency).
+
+agent_max_cost_per_invocation_usd: 0.10
+# Per-invocation cost cap. Used by the LangChain + Anthropic agent
+# runner. Above $0.10 should be exceptional.
+
+# ── Eval datasets (#16a + #16h) ─────────────────────────────────────
+edge_case_soft_cap: 50
+# Soft-cap on the working edge_cases dataset. When at cap, append()
+# evicts the most-redundant row; if a True-North companion exists,
+# the evicted row is archived there. Don't go above 100 (defeats the
+# regression speed goal).
+
+true_north_max_cost_per_run_usd: 2.00
+# Per-run cost cap on True-North full-fidelity checks. Default weekly
+# cron honors this. Above $2 means you should consider sampling
+# instead of full-set evaluation.
+
+# ── Apply gates (Loop 4) ────────────────────────────────────────────
+apply_llm_p_r_drop_threshold: 0.10
+# Apply rolls back if past-email accuracy drops more than this when
+# adding a new rule or eval example. 0.10 = 10 percentage points.
+# Lower = more conservative; higher = more accepting of noise.
+
+# ── Canonical memory staleness (e1 + future operator-facing skills) ─
+course_policy_max_age_days: 180
+# Late-work policy text auto-flags as stale after N days.
+# Stale → skill escalates to operator instead of quoting outdated
+# policy. 180 = one academic semester.
+
+ta_roster_max_age_days: 180
+# TA roster auto-flags as stale after N days. Stale → skill
+# refuses to CC TAs and escalates instead. 180 = one semester.

@@ -1,0 +1,90 @@
+schema_version: "1"
+
+identity:
+  workflow_id: sample-echo-classifier
+  version: "1.0.0"
+  owner: framework
+  description: |
+    Synthetic sample skill — demonstrates the SAI skill plug-in protocol
+    (PRINCIPLES.md §33) without any real Gmail / Slack / LLM dependency.
+    Classifies short text into ["positive", "negative", "neutral"] using
+    a single keyword rule. Ships every required slot so a stranger
+    cloning the repo can see what a valid manifest looks like.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "python -m app.skills.sample_echo_skill"
+
+cascade:
+  - tier_id: rules
+    kind: rules
+    config:
+      keyword_map:
+        positive: ["good", "great", "excellent"]
+        negative: ["bad", "terrible", "awful"]
+    confidence_threshold: 0.85
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: cloud_llm
+    kind: cloud_llm
+    config:
+      provider: anthropic
+      model: claude-haiku-4-5-20251001
+      prompt: "Classify this text into positive / negative / neutral."
+    confidence_threshold: 0.7
+    cost_cap_per_call_usd: 0.01
+
+# No `agent` tier here, so tools[] can be empty. (When a skill DOES
+# declare an agent tier, the tools[] section is mandatory.)
+tools: []
+
+eval:
+  # Per principle #16a (revised 2026-05-03): every eval slot is an
+  # instance of EvalDataset. The manifest declares them as a list.
+  datasets:
+    - kind: canaries
+      path: canaries.jsonl
+      min_count: 1
+      fail_mode: hard_fail
+    - kind: edge_cases
+      path: edge_cases.jsonl
+      min_count: 5
+      cap: 50
+      metric: accuracy
+      max_p_r_drop: 0.10
+      fail_mode: soft_fail
+    - kind: workflow
+      path: workflow_regression.jsonl
+      min_count: 5
+      fail_mode: hard_fail
+    # True-North companion (#16h) — uncapped historical record. Optional
+    # but recommended after 30 days + 25+ approved corrections.
+    # Commented for the sample; uncomment when the skill has accumulated
+    # operator feedback worth archiving.
+    # - kind: true_north
+    #   path: true_north.jsonl
+    #   run_cadence: weekly
+    #   max_cost_per_run_usd: 2.00
+
+feedback:
+  channel: sai-eval
+  patterns:
+    - add_rule
+    - eval_add
+
+outputs:
+  - name: classification
+    side_effect: none
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.05
+  iteration_cap: 4
+  daily_invocation_cap: 500
+  audit_log_path: "~/Library/Logs/SAI/sample-echo-classifier.jsonl"
+
+observability:
+  langsmith_project: null
+  metrics_emit: true
