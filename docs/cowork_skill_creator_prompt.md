@@ -652,49 +652,28 @@ hashes; Claude Code just merges them in.
 Walk them through these questions IN ORDER. Don't skip ahead. After
 each question, summarize what you have so far and ask the next one.
 
-### Q0 — Does this skill already exist? (do this BEFORE Q1)
+### Q0 — Map the request against the SAI skill catalog (don't search for it)
 
-Before asking the operator anything, check whether what they
-described is ALREADY shipped. The operator's installation has
-existing skills under `~/Lutz_Dev/SAI/skills/` — most relevantly:
+You **already KNOW** what skills exist in this operator's SAI
+installation — they're enumerated below in the **SAI skill catalog**
+section. **Do NOT** ask Claude Code or the file system "do you have
+a skill that does X". Read the catalog inline and decide.
 
-- `cornell-delay-triage` (e1) — student extension-request triage
-- `sample_echo_skill` (in public) — synthetic example
+The operator regenerates the catalog before pasting this prompt by
+running:
+```sh
+.venv/bin/python -m scripts.sai_skill_catalog \
+    --paste-into docs/cowork_skill_creator_prompt.md
+```
 
-For each, you have access to:
-- the manifest (`skill.yaml`)
-- the runner (`runner.py`)
-- the eval files
-- the `docs/e1_principles_audit.md` doc that explains the
-  decisions
+That command updates the `<!-- SAI_SKILL_CATALOG_BEGIN -->
 
-**If the operator's spec maps onto an existing skill** (>70% of
-requirements covered), DO NOT walk them through Q1-Q9. Instead:
+_The catalog is empty in the public repo template — operators run
+`python -m scripts.sai_skill_catalog --paste-into docs/cowork_skill_creator_prompt.md`
+on their installation to populate this block before pasting the
+prompt into Co-Work._
 
-1. Open with: "This skill (or its core) already exists at
-   `<path>`. Let me do a per-requirement gap analysis instead of
-   walking you through full skill creation."
-2. Produce a table mapping each operator requirement to the
-   existing primitive that covers it (or to the gap that
-   doesn't).
-3. List the REAL gaps (typically: small template changes,
-   missing config entries, naming differences).
-4. For each gap, propose either (a) a skill-side change you can
-   emit as a diff, OR (b) a framework-side change that needs
-   its own design doc per #33a.
-5. Propose using any operator-supplied examples as new
-   `workflow_regression.jsonl` cases.
-
-**If the operator pushes back** ("but I want a fresh skill"),
-ask why. Reasons that justify a fresh skill: different trigger,
-different course, different outputs. Reasons that don't: "I want
-to start over." Re-using the existing skill + extending it via
-config is almost always the right call.
-
-The dry-run regression set
-(`eval/skill_creator_regression.jsonl` +
-`docs/skill_creator_dry_runs/`) covers this Q0 path — see those
-for examples of what good Q0 handling looks like.
+<!-- SAI_SKILL_CATALOG_END -->
 
 ### Framework-validator constants you CANNOT soften from a skill
 

@@ -83,6 +83,7 @@ class AnthropicJsonProvider:
         self,
         prompt: str,
         *,
+        system: Optional[str] = None,
         schema: Optional[dict[str, Any]] = None,
         schema_name: str = "JsonReply",
     ) -> dict[str, Any]:
@@ -100,6 +101,11 @@ class AnthropicJsonProvider:
         treated as a code smell: if you know what you expect, say
         so. The default exists only for callers genuinely doing
         free-form extraction.
+
+        ``system`` is an optional system prompt placed in Anthropic's
+        ``system`` slot. Skills that load a hash-locked prompt via
+        ``load_hashed_prompt`` typically pass it here so it doesn't
+        get concatenated into the user prompt.
         """
 
         request = LLMRequest(
@@ -108,6 +114,7 @@ class AnthropicJsonProvider:
             response_schema_name=schema_name,
             max_output_tokens=self.max_tokens,
             temperature=self.temperature,
+            system=system,
         )
         response = self._inner.predict(request)
         # LLMResponse.output is typed dict[str, Any] — Pydantic
