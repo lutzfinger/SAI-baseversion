@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     print("     `merge_curated_eval_into_overlay` ships):")
     print()
     print("     For each row marked keep=yes, append a JSON line to")
-    print("     ~/Lutz_Dev/SAI/eval/local_email_classification_dataset_overlay.jsonl")
+    print("     $SAI_PRIVATE/eval/local_email_classification_dataset_overlay.jsonl")
     print("     in the EmailClassificationDatasetOverlayRow shape.")
     return 0
 

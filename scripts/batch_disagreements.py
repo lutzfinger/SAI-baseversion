@@ -106,12 +106,20 @@ def _select_batch(
     produced the 25-row batch.
     """
 
+    # Operator's own domains come from SAI_INTERNAL_DOMAINS (per #17 —
+    # values are operator-specific, never hardcoded).
+    import os
+    internal_domains = {
+        d.strip().lower() for d in os.environ.get("SAI_INTERNAL_DOMAINS", "").split(",")
+        if d.strip()
+    }
+
     def is_classifier_handled(r: DisagreementRow) -> bool:
         fe = (r.message.from_email or "").lower()
         if not fe:
             return True
         dom = fe.split("@")[-1] if "@" in fe else fe
-        if dom == "lutzfinger.com":
+        if dom in internal_domains:
             return True
         if fe.startswith(("no-reply@", "noreply@", "no-reply-",
                           "donotreply@", "do-not-reply@")):

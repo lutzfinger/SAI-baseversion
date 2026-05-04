@@ -5,7 +5,7 @@ SAI_E1_SEND_ENABLED kill switch. Tests inject Gmail stubs.
 
 DEFERRED 2026-05-04: Tests target v0.2.0 send_tool API
 (reason strings, label_fn signature). The skill shipped at
-~/Lutz_Dev/SAI/skills/cornell-delay-triage/ is now v0.2.2 with a
+$SAI_PRIVATE/skills/cornell-delay-triage/ is now v0.2.2 with a
 revised send_tool surface. Tests need a rewrite. Until then,
 skipping at module level keeps the suite green.
 """

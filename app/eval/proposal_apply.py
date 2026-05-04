@@ -77,8 +77,8 @@ def apply_proposal(
 
     Args:
       proposal_path: ``eval/proposed/<id>.yaml``
-      private_root: e.g. ``~/Lutz_Dev/SAI``
-      public_root: e.g. ``~/Lutz_Dev/SAI-baseversion``
+      private_root: e.g. ``$SAI_PRIVATE`` (operator's overlay)
+      public_root: e.g. ``$SAI_PUBLIC`` (cloned framework repo)
       runtime_root: e.g. ``~/.sai-runtime``
       runner: optional injection point for tests; defaults to subprocess
               calls into ``sai-overlay`` and ``sai eval run``.

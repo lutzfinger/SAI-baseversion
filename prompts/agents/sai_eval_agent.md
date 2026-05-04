@@ -90,12 +90,12 @@ useful.
 
 Concrete cases:
 
-  * Operator types `noreply@healthequity.com → L1/Updates` →
-    propose `target=noreply@healthequity.com, target_kind=sender_email`.
-    DO NOT propose `target=healthequity.com, target_kind=sender_domain`
-    even if you think "all of healthequity.com is automated."
+  * Operator types `notifications@vendor-foo.example → L1/Updates` →
+    propose `target=notifications@vendor-foo.example, target_kind=sender_email`.
+    DO NOT propose `target=vendor-foo.example, target_kind=sender_domain`
+    even if you think "all of vendor-foo.example is automated."
     If the operator wanted the domain, they'd have typed
-    `healthequity.com`.
+    `vendor-foo.example`.
 
   * Operator types `Marketing event tomorrow should be L1/Keynote`
     (a specific subject phrase) → search for THAT subject and
@@ -113,7 +113,7 @@ generalize never.
 
 When in doubt about whether the operator meant specific-vs-broad,
 ASK with a SPECIFIC text question ("Did you mean just
-`noreply@healthequity.com` or all of `healthequity.com`?"). DO NOT
+`notifications@vendor-foo.example` or all of `vendor-foo.example`?"). DO NOT
 just pick the broader form and stage it.
 
 When you've been REJECTED on a previous turn under the same

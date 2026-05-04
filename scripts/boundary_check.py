@@ -42,14 +42,19 @@ ALLOWLIST_FILENAME = "boundary_check_allowlist.txt"
 # PRINCIPLES.md before this layer existed.
 PRIVATE_TERMS_FILENAME = "boundary_check_private_terms.txt"
 
-PLACEHOLDER_EMAIL_DOMAINS = frozenset({"example.com", "example.org", "localhost", "test"})
+PLACEHOLDER_EMAIL_DOMAINS = frozenset({
+    "example.com", "example.org", "example.net", "example.edu",
+    "localhost", "test",
+})
 ALLOWED_SLACK_CHANNELS = frozenset({
     "#general", "#example", "#test-channel",
     # Canonical SAI channel names (documented in PRINCIPLES.md
     # operating defaults + #16i channel registry). These are the
     # framework's default channel names for stranger installs;
     # operator can override via private overlay.
-    "#sai-eval", "#sai-cost", "#sai-metrics",
+    "#sai-eval", "#sai-cost", "#sai-metrics", "#sai-dashboard",
+    "#sai-status", "#sai-errors", "#sai-denied", "#sai-feedback",
+    "#sai-tracing-feedback",
 })
 
 # Binary / build artifact extensions that shouldn't be scanned.
@@ -81,12 +86,12 @@ PERSONAL_STRINGS_RE = re.compile(
 USERS_PATH_RE = re.compile(r"/Users/(?!example/)[A-Za-z0-9._-]+")
 
 # Slack channels: #channelname not in the allowlist.
-SLACK_CHANNEL_RE = re.compile(r"(?<![A-Za-z0-9_])#([a-z0-9][a-z0-9._-]{1,79})\b")
+SLACK_CHANNEL_RE = re.compile(r"(?<![A-Za-z0-9_/=])#([a-z0-9][a-z0-9._-]{1,79})\b")
 
 # Phone numbers (US-ish; loose). Accepts +1 555-555-5555, (555) 555-5555,
 # 555.555.5555, etc. Excludes obvious placeholder 5555555555 / 1234567890.
 PHONE_RE = re.compile(
-    r"(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)"
+    r"(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)(?!\.\d)"
 )
 PHONE_PLACEHOLDERS = frozenset({"5555555555", "1234567890", "0000000000"})
 
@@ -207,6 +212,10 @@ def scan_line(relpath: str, line_no: int, line: str) -> list[Violation]:
         # company names like pied-piper.example, hooli.example, etc.
         if domain.endswith(".example"):
             continue
+        # Subdomains of placeholder domains: grad.example.edu, mail.example.com,
+        # etc. — also placeholders by construction.
+        if any(domain.endswith("." + p) for p in PLACEHOLDER_EMAIL_DOMAINS):
+            continue
         violations.append(Violation(relpath, line_no, "email-non-placeholder",
                                     match.group(0)))
 
@@ -226,6 +235,15 @@ def scan_line(relpath: str, line_no: int, line: str) -> list[Violation]:
         # are colors (#RGB, #RGBA, #RRGGBB, #RRGGBBAA), not Slack channels.
         body = match.group(1)
         if len(body) in (3, 4, 6, 8) and re.fullmatch(r"[0-9a-f]+", body):
+            continue
+        # Principle-reference exclusion: tokens like `#6a`, `#16i`, `#33b`,
+        # `#3` are PRINCIPLES.md cross-references, not Slack channels.
+        # Shape: digits optionally followed by 1-2 lowercase letters.
+        if re.fullmatch(r"\d+[a-z]{0,2}", body):
+            continue
+        # Test-fixture channels: `#test-*`, `#mock-*`, `#fake-*` are
+        # synthetic test placeholders, not real channels.
+        if body.startswith(("test-", "mock-", "fake-", "sample-")):
             continue
         violations.append(Violation(relpath, line_no, "slack-channel-non-placeholder",
                                     channel))

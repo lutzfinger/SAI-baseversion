@@ -23,14 +23,14 @@ we do EVAL FIRST on any workflow, but they're not filled out").
 ## What does NOT live here
 
 - **Real operator data** — those rows live in PRIVATE overlay
-  (`~/Lutz_Dev/SAI/eval/*.jsonl`). The merge gives private
+  (`$SAI_PRIVATE/eval/*.jsonl`). The merge gives private
   precedence on path conflicts.
 - **Per-skill regression sets** — those live in
   `app/skills/<workflow_id>/{canaries,edge_cases,workflow_regression}.jsonl`
   (per #33 skill plug-in protocol). The operator's skills land in
   the private overlay's `skills/` directory.
 - **Process-level eval** (e.g. how the skill-creator behaves) —
-  that's `~/Lutz_Dev/SAI/eval/skill_creator_regression.jsonl`,
+  that's `$SAI_PRIVATE/eval/skill_creator_regression.jsonl`,
   private.
 
 ## How a stranger uses this

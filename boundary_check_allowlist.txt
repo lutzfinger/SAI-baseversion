@@ -18,6 +18,14 @@ app/shared/runtime_env.py
 # Framework code that parses keychain:// references. Must mention the scheme
 # name to do its job.
 
+scripts/regression_test_email_classifier.py
+# Script comment documents the op:// / keychain:// scheme names to explain
+# why the runtime env needs to load before Settings reads it.
+
+docs/slack_bot_install.md
+# Slack bot install runbook documents the op:// secret-reference scheme
+# so operators know how to wire 1Password tokens into runtime.env.
+
 PHASE-2-DONE.md
 # Phase 2 report documents the boundary linter's rules — must show examples
 # of what each rule catches.
@@ -25,6 +33,11 @@ PHASE-2-DONE.md
 tests/runtime/test_boundary_check.py
 # Test file for the boundary linter. Must contain trigger examples for each
 # rule (otherwise it can't test them). Not real personal data.
+
+tests/test_disambiguation.py
+# Uses 10-digit Unix-epoch-shaped timestamps as Slack message_ts fixtures
+# (1700000001, 1700000002, 1700000003). Phone-number regex matches them.
+# All synthetic test data, not operator data.
 
 PHASE-3-PARTIAL-DONE.md
 # Phase 3 partial report. References the private repo path Lutz_Dev/SAI

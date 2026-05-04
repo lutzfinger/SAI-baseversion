@@ -24,8 +24,8 @@
 # \bchris\b
 #
 # # Operator-specific domains beyond what `personal-string` already covers:
-# \bloyal\.vc\b
-# \becornell\.com\b
+# # (one regex per line, anchored)
+# # \byour-company\.com\b
 #
-# # Generic operator identifiers (real names beyond lutzfinger / lfinger):
-# # \bmycompany\b
+# # Generic operator identifiers beyond what's already in PERSONAL_STRINGS_RE:
+# # \byour-handle\b

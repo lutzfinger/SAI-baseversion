@@ -12,7 +12,7 @@ live Gmail, no live filesystem outside tmp_path. Verifies:
 
 DEFERRED 2026-05-04: Tests target the v0.2.0 cascade shape
 (canonical_lookup tier, hardcoded handler factory names). The skill
-shipped at ~/Lutz_Dev/SAI/skills/cornell-delay-triage/ is now v0.2.2
+shipped at $SAI_PRIVATE/skills/cornell-delay-triage/ is now v0.2.2
 (course-agnostic; cascade is input_guards → delay_request_filter →
 prior_ai_reply_check → policy_and_ta_freshness → classify →
 draft_reply → safety_gate → human). These tests need a rewrite
@@ -39,7 +39,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-# The runner lives in the private overlay (~/Lutz_Dev/SAI/skills/...).
+# The runner lives in the private overlay ($SAI_PRIVATE/skills/...).
 # To import it from tests in the public tree, we add the merged
 # runtime path to sys.path.
 RUNTIME_ROOT = Path.home() / ".sai-runtime"
@@ -143,7 +143,7 @@ def test_input_guards_reject_non_allowed_sender(
     runner_module, monkeypatch, tmp_path,
 ):
     _stub_canonical(monkeypatch, tmp_path)
-    inp = _make_input(runner_module, raw_from="student@gmail.com")
+    inp = _make_input(runner_module, raw_from="student@example.com")
     result = runner_module.run(inp, proposed_dir=tmp_path / "proposed")
     assert result.final_verdict == "no_op"
     assert "sender_rejected" in result.final_reason

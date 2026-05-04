@@ -3,4 +3,4 @@ prompts:
   email/llm-classify-local.md: 0fc5ab1ea5573a8f72a34fb172c79076491d26c90afa5662e5a22ab4065f4c71
   email/llm-classify-cloud.md: b7f953d707ed2d731c375225f49b8046770a661923a82362514349e21943259e
   sai_email/plan.md: 64c47e95ecbe96519abac405ccb6ef5b71701523d17115bfc25190cf165e772b
-  agents/sai_eval_agent.md: 4db1fcb00cd2b7dfaa3644b2b9c639d8a7c4f6ff15c78d80eecaa7cb021b6243
+  agents/sai_eval_agent.md: 0640e42c1fec4f8ea32ed699a3df26ef9cb392e81b5c155295a88e92d650842a
