@@ -33,8 +33,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST_FILENAME = "boundary_check_allowlist.txt"
 
+# Operator-specific terms (private contact names, private bucket names,
+# operator's own domains beyond what `personal-string` already covers)
+# go in this file. It's NEVER committed (it's in .gitignore by default).
+# When present, the scanner treats every line as a regex pattern AND
+# violations are reported even in allowlisted files. This catches the
+# kind of narrative leaks that crept into PRINCIPLES.md / MIGRATION-
+# PRINCIPLES.md before this layer existed.
+PRIVATE_TERMS_FILENAME = "boundary_check_private_terms.txt"
+
 PLACEHOLDER_EMAIL_DOMAINS = frozenset({"example.com", "example.org", "localhost", "test"})
-ALLOWED_SLACK_CHANNELS = frozenset({"#general", "#example", "#test-channel"})
+ALLOWED_SLACK_CHANNELS = frozenset({
+    "#general", "#example", "#test-channel",
+    # Canonical SAI channel names (documented in PRINCIPLES.md
+    # operating defaults + #16i channel registry). These are the
+    # framework's default channel names for stranger installs;
+    # operator can override via private overlay.
+    "#sai-eval", "#sai-cost", "#sai-metrics",
+})
 
 # Binary / build artifact extensions that shouldn't be scanned.
 BINARY_EXTENSIONS = frozenset({
@@ -138,6 +154,47 @@ def _load_allowlist(root: Path) -> set[str]:
     return entries
 
 
+def _load_private_terms(root: Path) -> list[re.Pattern[str]]:
+    """Load operator-specific regex patterns from the private terms file.
+
+    The file is gitignored by convention. Each non-blank, non-comment
+    line is compiled as a case-insensitive regex. Patterns matched
+    here are reported even in allowlisted files — they're operator
+    data and should never appear in public.
+    """
+
+    path = root / PRIVATE_TERMS_FILENAME
+    if not path.exists():
+        return []
+    patterns: list[re.Pattern[str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            patterns.append(re.compile(line, re.IGNORECASE))
+        except re.error as exc:
+            print(
+                f"warning: invalid regex in {PRIVATE_TERMS_FILENAME!r}: "
+                f"{line!r} ({exc})", file=sys.stderr,
+            )
+    return patterns
+
+
+def _scan_private_terms(
+    relpath: str, line_no: int, line: str,
+    private_terms: list[re.Pattern[str]],
+) -> list[Violation]:
+    out: list[Violation] = []
+    for pattern in private_terms:
+        for match in pattern.finditer(line):
+            out.append(Violation(
+                relpath, line_no, "private-term",
+                f"matched {pattern.pattern!r}: {match.group(0)}",
+            ))
+    return out
+
+
 def scan_line(relpath: str, line_no: int, line: str) -> list[Violation]:
     violations: list[Violation] = []
 
@@ -191,7 +248,11 @@ def scan_line(relpath: str, line_no: int, line: str) -> list[Violation]:
     return violations
 
 
-def scan_file(path: Path, *, root: Path) -> list[Violation]:
+def scan_file(
+    path: Path, *, root: Path,
+    private_terms: list[re.Pattern[str]] | None = None,
+    skip_standard_rules: bool = False,
+) -> list[Violation]:
     rel = path.relative_to(root).as_posix()
     if _is_binary(path):
         return []
@@ -202,22 +263,42 @@ def scan_file(path: Path, *, root: Path) -> list[Violation]:
         return [Violation(rel, 0, "io-error", str(exc))]
     violations: list[Violation] = []
     for line_no, line in enumerate(lines, start=1):
-        violations.extend(scan_line(rel, line_no, line.rstrip("\n")))
+        clean = line.rstrip("\n")
+        if not skip_standard_rules:
+            violations.extend(scan_line(rel, line_no, clean))
+        if private_terms:
+            violations.extend(_scan_private_terms(rel, line_no, clean, private_terms))
     return violations
 
 
-def scan(root: Path, files: Iterable[Path], allowlist: set[str]) -> list[Violation]:
+def scan(
+    root: Path, files: Iterable[Path], allowlist: set[str],
+    private_terms: list[re.Pattern[str]] | None = None,
+) -> list[Violation]:
     violations: list[Violation] = []
+    private_terms = private_terms or []
     for path in files:
         rel = path.relative_to(root).as_posix()
-        if rel in allowlist:
-            continue
-        # Don't scan the allowlist file itself or this script
         if rel == ALLOWLIST_FILENAME:
+            continue
+        if rel == PRIVATE_TERMS_FILENAME:
             continue
         if rel == "scripts/boundary_check.py":
             continue
-        violations.extend(scan_file(path, root=root))
+        if rel in allowlist:
+            # Allowlisted files skip the standard rules but STILL get
+            # scanned for operator-specific private terms — those are
+            # narrative leaks the allowlist isn't meant to permit.
+            if private_terms:
+                violations.extend(scan_file(
+                    path, root=root,
+                    private_terms=private_terms,
+                    skip_standard_rules=True,
+                ))
+            continue
+        violations.extend(scan_file(
+            path, root=root, private_terms=private_terms,
+        ))
     return violations
 
 
@@ -247,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     allowlist = _load_allowlist(root)
+    private_terms = _load_private_terms(root)
 
     if args.paths:
         files: list[Path] = []
@@ -258,11 +340,14 @@ def main(argv: list[str] | None = None) -> int:
         from_git = _list_files_via_git(root)
         files = from_git if from_git is not None else _list_files_via_walk(root)
 
-    violations = scan(root, files, allowlist)
+    violations = scan(root, files, allowlist, private_terms=private_terms)
 
     if not violations:
+        suffix = ""
+        if private_terms:
+            suffix = f"; {len(private_terms)} private-term pattern(s) loaded"
         print(f"boundary check ok: {len(files)} files scanned, 0 violations "
-              f"(allowlist entries: {len(allowlist)})")
+              f"(allowlist entries: {len(allowlist)}{suffix})")
         return 0
 
     print(f"boundary check FAILED: {len(violations)} violation(s) "

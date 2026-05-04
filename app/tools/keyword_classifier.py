@@ -44,7 +44,7 @@ class KeywordEmailClassifierTool:
         match_type = "fallback"
         classification = EmailClassification(
             message_id=message.message_id,
-            level1_classification="other",
+            level1_classification="no_label",
             level2_intent="others",
             confidence=0.24,
             reason="No deterministic newsletter rule matched.",
@@ -99,7 +99,7 @@ class KeywordEmailClassifierTool:
             status=ToolExecutionStatus.COMPLETED,
             details={
                 "match_type": match_type,
-                "resolved_level1": classification.level1_classification != "other",
+                "resolved_level1": classification.level1_classification != "no_label",
                 "matched_reason": matched_reason,
             },
         )

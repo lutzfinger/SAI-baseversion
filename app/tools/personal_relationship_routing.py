@@ -764,7 +764,7 @@ class OtherToPersonalDecisionEngine:
 
     def decide(self, request: RelationshipDecisionInput) -> RelationshipDecisionOutput:
         existing = request.existing_category.strip().lower()
-        if existing not in {"other", "l1/other"}:
+        if existing not in {"no_label", "l1/no_label"}:
             return RelationshipDecisionOutput(
                 final_category="unchanged",
                 override_applied=False,

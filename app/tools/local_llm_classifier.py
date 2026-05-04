@@ -36,7 +36,7 @@ class MockJSONClient:
             "message_id": _extract_message_id(prompt),
             "level1_classification": "newsletters"
             if "unsubscribe" in prompt.lower() or "newsletter" in prompt.lower()
-            else "other",
+            else "no_label",
             "level2_intent": "informational",
             "confidence": 0.66,
             "reason": "Mock classifier inferred the category from the prompt content.",

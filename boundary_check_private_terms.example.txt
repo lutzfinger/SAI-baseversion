@@ -1,0 +1,31 @@
+# Operator-specific terms for the boundary linter — PRIVATE template.
+#
+# COPY this file to `boundary_check_private_terms.txt` (which is in
+# .gitignore) and fill in YOUR operator-specific terms below.
+#
+# Each line is a regex pattern (case-insensitive). Lines starting with #
+# are comments. Empty lines are skipped.
+#
+# These patterns are checked even in allowlisted markdown files, which
+# is where operator data has historically leaked (PRINCIPLES.md /
+# MIGRATION-PRINCIPLES.md narratives that mention real contacts /
+# private bucket names / non-placeholder domains).
+#
+# Examples (replace with YOUR terms — these are placeholders):
+#
+# # Private bucket names that should never appear in PUBLIC docs:
+# \bcherry\b
+# \bkeynote\b
+# \bellis\b
+#
+# # Operator's frequent contact names:
+# \bdinika\b
+# \bkamal\b
+# \bchris\b
+#
+# # Operator-specific domains beyond what `personal-string` already covers:
+# \bloyal\.vc\b
+# \becornell\.com\b
+#
+# # Generic operator identifiers (real names beyond lutzfinger / lfinger):
+# # \bmycompany\b

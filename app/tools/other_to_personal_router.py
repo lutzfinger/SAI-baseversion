@@ -55,7 +55,7 @@ class OtherToPersonalRouterTool:
         message: EmailMessage,
         classification: EmailClassification,
     ) -> tuple[EmailClassification, ToolExecutionRecord]:
-        if classification.level1_classification != "other":
+        if classification.level1_classification != "no_label":
             return classification, ToolExecutionRecord(
                 tool_id=self.tool_definition.tool_id,
                 tool_kind=self.tool_definition.kind,

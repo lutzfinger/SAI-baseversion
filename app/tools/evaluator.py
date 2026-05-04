@@ -40,7 +40,7 @@ class ClassificationConsistencyEvaluatorTool:
             decision_source = "keyword_override"
 
         if (
-            final_candidate.level1_classification == "other"
+            final_candidate.level1_classification == "no_label"
             and _looks_like_actionable_message(message)
             and final_candidate.level2_intent == "informational"
         ):

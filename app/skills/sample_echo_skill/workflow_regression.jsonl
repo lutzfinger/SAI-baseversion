@@ -1,0 +1,5 @@
+{"case_id": "wf_empty_input", "input": "", "expected_outcome": "abstain", "description": "Empty input should abstain, not crash."}
+{"case_id": "wf_long_input", "input": "good good good good good good good good good good good good good good good good good good good good", "expected_outcome": "positive", "description": "Long input still classifies."}
+{"case_id": "wf_unicode", "input": "great work — ✨ amazing", "expected_outcome": "positive", "description": "Unicode characters don't break parsing."}
+{"case_id": "wf_mixed_case", "input": "GREAT day", "expected_outcome": "positive", "description": "Case-insensitive keyword match."}
+{"case_id": "wf_no_keyword", "input": "the sky is blue", "expected_outcome": "neutral_or_escalate", "description": "No keyword match → either neutral fallback or escalate to LLM tier."}

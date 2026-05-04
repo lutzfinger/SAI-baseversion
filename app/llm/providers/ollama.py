@@ -36,12 +36,30 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
-from typing import Any
+from typing import Any, Optional
 
 import httpx
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.llm.cost import CostTable, get_default_cost_table
 from app.llm.provider import LLMProviderError, LLMRequest, LLMResponse, TokenUsage
+
+
+# --- Response shape validation per principle 6a ---------------------------------
+# Network response. `extra="ignore"` allows Ollama API growth without
+# breaking us; we validate the fields we depend on are present + typed.
+
+class _OllamaGenerateResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    response: str = ""
+    prompt_eval_count: Optional[int] = 0
+    eval_count: Optional[int] = 0
+    model: Optional[str] = None
+
+
+class _OllamaVersionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    version: str = ""
 
 DEFAULT_HOST = "http://127.0.0.1:11434"
 
@@ -126,7 +144,7 @@ class OllamaProvider:
         try:
             response = self._client.post(f"{self.host}/api/generate", json=body)
             response.raise_for_status()
-            payload = response.json()
+            raw_payload = response.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
             raise LLMProviderError(
                 f"Ollama request failed: {exc}",
@@ -135,7 +153,16 @@ class OllamaProvider:
             ) from exc
         latency_ms = int((perf_counter() - started) * 1000)
 
-        raw_text = str(payload.get("response", "") or "").strip()
+        try:
+            payload = _OllamaGenerateResponse.model_validate(raw_payload)
+        except ValidationError as exc:
+            raise LLMProviderError(
+                f"Ollama response failed schema validation: {exc}",
+                provider_id=self.provider_id,
+                model=self.model,
+            ) from exc
+
+        raw_text = payload.response.strip()
         if not raw_text:
             raise LLMProviderError(
                 "Ollama response had empty body",
@@ -152,10 +179,10 @@ class OllamaProvider:
             ) from exc
 
         usage = TokenUsage(
-            input_tokens=int(payload.get("prompt_eval_count") or 0),
-            output_tokens=int(payload.get("eval_count") or 0),
+            input_tokens=payload.prompt_eval_count or 0,
+            output_tokens=payload.eval_count or 0,
         )
-        model_used = str(payload.get("model") or self.model)
+        model_used = payload.model or self.model
         cost = self._cost_table.cost_for(
             provider_id=self.provider_id, model=model_used, usage=usage
         )
@@ -207,11 +234,14 @@ def _detect_native_schema_support(client: httpx.Client, host: str) -> bool:
             timeout=httpx.Timeout(connect=3.0, read=3.0, write=3.0, pool=3.0),
         )
         response.raise_for_status()
-        payload = response.json()
+        raw_payload = response.json()
     except (httpx.HTTPError, json.JSONDecodeError):
         return False
-    version_str = str(payload.get("version") or "")
-    return _version_at_least(version_str, _NATIVE_SCHEMA_MIN_VERSION)
+    try:
+        payload = _OllamaVersionResponse.model_validate(raw_payload)
+    except ValidationError:
+        return False
+    return _version_at_least(payload.version, _NATIVE_SCHEMA_MIN_VERSION)
 
 
 def _version_at_least(version_str: str, minimum: tuple[int, int, int]) -> bool:
