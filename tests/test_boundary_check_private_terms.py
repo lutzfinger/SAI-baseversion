@@ -79,20 +79,20 @@ class TestPrivateTermsLoader:
 class TestPrivateTermsScanning:
     def test_private_term_in_allowlisted_file_is_caught(self, tmp_path):
         """The exact failure mode we're fixing: PRINCIPLES.md was
-        allowlisted, so 'cherry' / 'cornell' / 'keynote' drifted in."""
+        allowlisted, so private bucket names drifted into prose."""
 
         root = _stage_root(
             tmp_path,
             files={
-                "PRINCIPLES.md": "We use cherry as a private bucket name.\n",
+                "PRINCIPLES.md": "We use foobar as a private bucket name.\n",
                 "innocent.py": "x = 1\n",
             },
             allowlist=["PRINCIPLES.md  # documentation"],
-            private_terms=[r"\bcherry\b"],
+            private_terms=[r"\bfoobar\b"],
         )
         violations = _scan(root)
-        priv = [v for v in violations if v.rule == "private-term"]
-        assert priv, "expected private-term violation in allowlisted file"
+        priv = [v for v in violations if v.rule == "operator-narrative-leak"]
+        assert priv, "expected operator-narrative-leak in allowlisted file"
         assert any("PRINCIPLES.md" in v.relpath for v in priv)
 
     def test_private_term_in_normal_file_is_caught(self, tmp_path):
@@ -102,7 +102,7 @@ class TestPrivateTermsScanning:
             private_terms=[r"\bdinika\b"],
         )
         violations = _scan(root)
-        priv = [v for v in violations if v.rule == "private-term"]
+        priv = [v for v in violations if v.rule == "operator-narrative-leak"]
         assert priv
 
     def test_no_private_terms_no_violations(self, tmp_path):
@@ -112,7 +112,7 @@ class TestPrivateTermsScanning:
             private_terms=[r"\bsecret_word\b"],
         )
         violations = _scan(root)
-        priv = [v for v in violations if v.rule == "private-term"]
+        priv = [v for v in violations if v.rule == "operator-narrative-leak"]
         assert priv == []
 
     def test_no_private_terms_file_falls_back_silently(self, tmp_path):
@@ -121,7 +121,7 @@ class TestPrivateTermsScanning:
         violations = _scan(root)
         # Allowed: any non-private-term violations; just verify the
         # scanner didn't crash.
-        priv = [v for v in violations if v.rule == "private-term"]
+        priv = [v for v in violations if v.rule == "operator-narrative-leak"]
         assert priv == []
 
     def test_violation_message_includes_match(self, tmp_path):
@@ -131,6 +131,6 @@ class TestPrivateTermsScanning:
             private_terms=[r"\bcornell\b"],
         )
         violations = _scan(root)
-        priv = [v for v in violations if v.rule == "private-term"]
+        priv = [v for v in violations if v.rule == "operator-narrative-leak"]
         assert priv
         assert "Cornell" in priv[0].snippet or "cornell" in priv[0].snippet.lower()

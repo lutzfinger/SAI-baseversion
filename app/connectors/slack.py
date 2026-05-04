@@ -13,6 +13,13 @@ from slack_sdk.errors import SlackApiError
 
 from app.connectors.base import ConnectorAction, ConnectorDescriptor
 from app.connectors.slack_config import SlackConnectorPolicy
+from app.control_plane.slack_models import (
+    SlackChatPostMessageResponse,
+    SlackConversationsHistoryResponse,
+    SlackConversationsListResponse,
+    SlackConversationsOpenResponse,
+    SlackFilesUploadResponse,
+)
 from app.shared.models import PolicyDocument
 
 
@@ -117,14 +124,20 @@ class SlackPostConnector:
             payload["thread_ts"] = thread_ts
         if blocks:
             payload["blocks"] = blocks
-        response = self._api_post("chat.postMessage", payload=payload, token=token)
-        if not response.get("ok", False):
+        raw = self._api_post("chat.postMessage", payload=payload, token=token)
+        try:
+            response = SlackChatPostMessageResponse.model_validate(raw)
+        except Exception as exc:
             raise SlackConnectorError(
-                f"Slack chat.postMessage failed: {response.get('error', 'unknown_error')}"
+                f"Slack chat.postMessage returned malformed response: {exc}"
+            ) from exc
+        if not response.ok:
+            raise SlackConnectorError(
+                f"Slack chat.postMessage failed: {response.error or 'unknown_error'}"
             )
         return {
-            "channel": str(response.get("channel", channel_id)),
-            "ts": str(response.get("ts", "")),
+            "channel": str(response.channel or channel_id),
+            "ts": str(response.ts or ""),
         }
 
     def open_direct_message_channel(self, *, user_id: str) -> str:
@@ -145,15 +158,18 @@ class SlackPostConnector:
         configured_channel = channel or self.default_channel
         channel_id = self._resolve_channel_id(configured_channel, token=token)
         query = parse.urlencode({"channel": channel_id, "limit": max(1, min(limit, 200))})
-        response = self._api_get(f"conversations.history?{query}", token=token)
-        if not response.get("ok", False):
+        raw = self._api_get(f"conversations.history?{query}", token=token)
+        try:
+            response = SlackConversationsHistoryResponse.model_validate(raw)
+        except Exception as exc:
             raise SlackConnectorError(
-                f"Slack conversations.history failed: {response.get('error', 'unknown_error')}"
+                f"Slack conversations.history returned malformed response: {exc}"
+            ) from exc
+        if not response.ok:
+            raise SlackConnectorError(
+                f"Slack conversations.history failed: {response.error or 'unknown_error'}"
             )
-        messages = response.get("messages", [])
-        if not isinstance(messages, list):
-            raise SlackConnectorError("Slack conversations.history returned malformed messages.")
-        return [item for item in messages if isinstance(item, dict)]
+        return [item for item in response.messages if isinstance(item, dict)]
 
     def upload_file(
         self,
@@ -170,7 +186,7 @@ class SlackPostConnector:
         path = Path(file_path)
         client = self._web_client(token)
         try:
-            response = client.files_upload_v2(
+            raw = client.files_upload_v2(
                 channel=channel_id,
                 file=path,
                 filename=path.name,
@@ -181,14 +197,19 @@ class SlackPostConnector:
         except SlackApiError as exc:
             error_message = exc.response.get("error", "slack_api_error")
             raise SlackConnectorError(f"Slack files_upload_v2 failed: {error_message}") from exc
-        file_payload: dict[str, Any] = cast(dict[str, Any], response.get("file", {}))
-        if not isinstance(file_payload, dict):
+        try:
+            response = SlackFilesUploadResponse.model_validate(raw.data)
+        except Exception as exc:
+            raise SlackConnectorError(
+                f"Slack files_upload_v2 returned malformed response: {exc}"
+            ) from exc
+        if response.file is None:
             raise SlackConnectorError("Slack file upload returned a malformed file payload.")
         return {
             "channel": channel_id,
-            "file_id": str(file_payload.get("id", "")),
+            "file_id": str(response.file.id or ""),
             "title": title,
-            "permalink": str(file_payload.get("permalink", "")),
+            "permalink": str(response.file.permalink or ""),
         }
 
     def _resolve_channel_id(self, channel: str, *, token: str) -> str:
@@ -211,27 +232,26 @@ class SlackPostConnector:
                     **({"cursor": cursor} if cursor else {}),
                 }
             )
-            response = self._api_get(
+            raw = self._api_get(
                 f"conversations.list?{query}",
                 token=token,
             )
-            if not response.get("ok", False):
+            try:
+                response = SlackConversationsListResponse.model_validate(raw)
+            except Exception as exc:
                 raise SlackConnectorError(
-                    f"Slack conversations.list failed: {response.get('error', 'unknown_error')}"
+                    f"Slack conversations.list returned malformed response: {exc}"
+                ) from exc
+            if not response.ok:
+                raise SlackConnectorError(
+                    f"Slack conversations.list failed: {response.error or 'unknown_error'}"
                 )
-            channels = response.get("channels", [])
-            if isinstance(channels, list):
-                for item in channels:
-                    if not isinstance(item, dict):
-                        continue
-                    if str(item.get("name", "")).strip().lower() == target_name:
-                        channel_id = str(item.get("id", "")).strip()
-                        self._assert_allowed(channel_name=target_name, channel_id=channel_id)
-                        return channel_id
-            metadata = response.get("response_metadata", {})
-            if not isinstance(metadata, dict):
-                break
-            cursor = str(metadata.get("next_cursor", "")).strip()
+            for item in response.channels:
+                if (item.name or "").strip().lower() == target_name:
+                    channel_id = (item.id or "").strip()
+                    self._assert_allowed(channel_name=target_name, channel_id=channel_id)
+                    return channel_id
+            cursor = str(response.response_metadata.get("next_cursor", "")).strip()
             if not cursor:
                 break
         raise SlackConnectorError(f"Slack channel not found or not accessible: {channel}")
@@ -244,21 +264,26 @@ class SlackPostConnector:
             raise SlackConnectorError("Slack direct messages are not allowed by policy.")
         if self.policy.allowed_user_ids and normalized_user_id not in self.policy.allowed_user_ids:
             raise SlackConnectorError("Slack direct message target user is not allowed.")
-        response = self._api_post(
+        raw = self._api_post(
             "conversations.open",
             payload={"users": normalized_user_id},
             token=token,
         )
-        if not response.get("ok", False):
+        try:
+            response = SlackConversationsOpenResponse.model_validate(raw)
+        except Exception as exc:
             raise SlackConnectorError(
-                f"Slack conversations.open failed: {response.get('error', 'unknown_error')}"
+                f"Slack conversations.open returned malformed response: {exc}"
+            ) from exc
+        if not response.ok:
+            raise SlackConnectorError(
+                f"Slack conversations.open failed: {response.error or 'unknown_error'}"
             )
-        channel = response.get("channel", {})
-        if not isinstance(channel, dict):
+        if response.channel is None:
             raise SlackConnectorError(
                 "Slack conversations.open returned a malformed channel payload."
             )
-        channel_id = str(channel.get("id", "")).strip()
+        channel_id = (response.channel.id or "").strip()
         if not _looks_like_channel_id(channel_id):
             raise SlackConnectorError(
                 "Slack conversations.open did not return a valid direct-message channel."

@@ -135,8 +135,8 @@ drift.**
 **Reverse path** (operator deliberately edits a skill in place):
 ```sh
 python -m scripts.promote_skill --in-place \\
-    --incoming-dir ~/Lutz_Dev/SAI/skills/cornell-delay-triage/ \\
-    --target-dir   ~/Lutz_Dev/SAI/skills/cornell-delay-triage/
+    --incoming-dir $SAI_PRIVATE/skills/some-workflow/ \\
+    --target-dir   $SAI_PRIVATE/skills/some-workflow/
 ```
 Re-stamps the integrity hash to the current contents. Auditable
 (the audit log records WHO ran promote_skill WHEN; the file
@@ -212,17 +212,17 @@ warns (Phase 2) / says nothing (Phase 1, today).
 # 1. Operator + Co-Work design a new skill in Co-Work session.
 # 2. Co-Work emits a tar.gz with skill.yaml + runner.py + eval files
 #    + prompts.
-# 3. Operator extracts to ~/Lutz_Dev/SAI/skills/incoming/<draft_id>/
+# 3. Operator extracts to $SAI_PRIVATE/skills/incoming/<draft_id>/
 
 # 4. Claude Code (or operator manually) validates + integrity-stamps
 #    + moves:
 python -m scripts.promote_skill \\
-    --incoming-dir ~/Lutz_Dev/SAI/skills/incoming/some-draft/ \\
-    --target-dir   ~/Lutz_Dev/SAI/skills/some-workflow/
+    --incoming-dir $SAI_PRIVATE/skills/incoming/some-draft/ \\
+    --target-dir   $SAI_PRIVATE/skills/some-workflow/
 
 # 5. Re-merge the overlay so the runtime picks it up:
-sai-overlay merge --public ~/Lutz_Dev/SAI-baseversion \\
-                  --private ~/Lutz_Dev/SAI \\
+sai-overlay merge --public $SAI_PUBLIC \\
+                  --private $SAI_PRIVATE \\
                   --out ~/.sai-runtime --clean
 
 # 6. Bot reloads on next iteration; cascade walks the new skill.

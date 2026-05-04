@@ -32,6 +32,11 @@ from typing import Optional
 
 import yaml
 
+from app.skills.integrity import (
+    INTEGRITY_FILENAME,
+    SkillIntegrityError,
+    verify_skill_integrity,
+)
 from app.skills.manifest import (
     SkillManifest,
     ValidationIssue,
@@ -244,6 +249,24 @@ def validate_skill_manifest(
                         "abstraction (#13) so the workflow stays portable."
                     ),
                 ))
+
+    # ── integrity hash: Phase 2 (lenient) — log drift, don't block ────
+    # Per docs/design_live_public_versioning.md sections D + E. Skills
+    # that haven't been promoted yet (no .skill-content-sha256 file) are
+    # silently allowed in Phase 2 — the operator stamps them once and
+    # subsequent edits surface as warnings here. Phase 3 (post-1.0)
+    # flips this to strict and fails closed.
+    integrity_path = skill_dir / INTEGRITY_FILENAME
+    if integrity_path.exists():
+        try:
+            verify_skill_integrity(skill_dir, strict=True)
+        except SkillIntegrityError as exc:
+            warnings.append(ValidationIssue(
+                severity="warning",
+                rule="integrity.drift",
+                message=str(exc),
+            ))
+            LOGGER.warning("skill integrity drift: %s", exc)
 
     return ValidationReport(
         workflow_id=workflow_id,

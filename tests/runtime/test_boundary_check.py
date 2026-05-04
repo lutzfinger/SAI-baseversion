@@ -157,3 +157,99 @@ def test_main_list_rules(capsys: pytest.CaptureFixture[str]) -> None:
     assert "email-non-placeholder" in out
     assert "personal-string" in out
     assert "secret-scheme-reference" in out
+    assert "operator-narrative-leak" in out
+
+
+# ─── operator-narrative-leak rule ─────────────────────────────────────
+
+
+from scripts.boundary_check import scan_file  # noqa: E402
+
+
+class TestNarrativeLeakHeuristics:
+    """Public family-relation heuristics fire on operator-narrative
+    prose that no public-mechanism doc should contain. These don't
+    depend on a private-terms file — they're vendor-neutral by design."""
+
+    def test_the_operators_wife_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("In production the operator's wife runs the cascade nightly.\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_the_operators_husband_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("The operator's husband approved the change.\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_the_operators_partner_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("the operator's partner reviewed it\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_the_operators_children_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("The operator's children attend Cornell.\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_possessive_name_with_setup_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("In Alice's setup the agent runs locally.\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_possessive_name_with_inbox_caught(self, tmp_path):
+        f = tmp_path / "leak.md"
+        f.write_text("Bob's inbox averages 200 messages a day.\n")
+        v = scan_file(f, root=tmp_path)
+        assert any(x.rule == "operator-narrative-leak" for x in v)
+
+    def test_technical_possessive_not_flagged(self, tmp_path):
+        """High-confidence design: 'Slack's API', 'Pydantic's model'
+        and similar generic technical possessives are NOT narrative
+        leaks. The noun list is specific to personal-narrative shapes."""
+        f = tmp_path / "ok.py"
+        f.write_text(
+            "# Slack's API responses validate via Pydantic's model_validate.\n"
+            "# OpenAI's response_format guarantees the schema.\n"
+            "# The cascade's runtime is per-tier configurable.\n"
+        )
+        v = scan_file(f, root=tmp_path)
+        narrative = [x for x in v if x.rule == "operator-narrative-leak"]
+        assert not narrative, [x.snippet for x in narrative]
+
+    def test_generic_operator_not_flagged(self, tmp_path):
+        """'the operator's setup' should NOT fire (setup is too
+        generic — only the family-relation noun list triggers
+        the public heuristic)."""
+        f = tmp_path / "ok.md"
+        f.write_text("The operator's setup uses a single Mac.\n")
+        v = scan_file(f, root=tmp_path)
+        narrative = [x for x in v if x.rule == "operator-narrative-leak"]
+        assert not narrative
+
+
+class TestNarrativeLeakInAllowlistedFile:
+    """The whole point of this rule: it fires EVEN in allowlisted
+    files. Allowlist exempts standard rules (op://, /Users/...) for
+    legitimate documentation; it should NEVER permit personal
+    narrative."""
+
+    def test_narrative_leak_fires_in_allowlisted_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ):
+        repo = tmp_path
+        (repo / "src").mkdir()
+        (repo / "src" / "narrative.md").write_text(
+            "# Doc\n\nThe operator's wife runs the daily report.\n"
+        )
+        (repo / ALLOWLIST_FILENAME).write_text(
+            "src/narrative.md\n# allowlisted for testing\n"
+        )
+        rc = main(["--root", str(repo)])
+        assert rc == 1, "narrative leak must fire even in allowlisted file"
+        err = capsys.readouterr().err
+        assert "operator-narrative-leak" in err

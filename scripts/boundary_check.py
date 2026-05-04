@@ -12,10 +12,18 @@ git) and fails if any matches a deny-list of personal-data patterns:
   - Phone numbers in common formats.
   - Secret-reference scheme strings: `op://`, `keychain://` (these belong in
     private SAI-overlay templates, not in the public repo).
+  - Operator-narrative leaks (rule ``operator-narrative-leak``): a small
+    set of high-confidence prose shapes ("the operator's wife", "his
+    fiancée", etc.) that always indicate a personal narrative slipped
+    into a public mechanism doc. PLUS any operator-specific patterns
+    declared in ``boundary_check_private_terms.txt`` (gitignored — each
+    operator drops their own list of family/colleague/contact names).
 
 Files listed in `boundary_check_allowlist.txt` (one path per line, # for
-comments) are exempt — every entry SHOULD be followed by a comment giving
-the reason.
+comments) are exempt from the standard rules — but the
+``operator-narrative-leak`` rule still fires even in allowlisted files,
+because narrative leaks are exactly what the allowlist is NOT meant to
+permit.
 
 Exit codes: 0 clean, 1 violations found, 2 bad input.
 """
@@ -97,6 +105,39 @@ PHONE_PLACEHOLDERS = frozenset({"5555555555", "1234567890", "0000000000"})
 
 # Secret-reference scheme strings.
 SECRET_SCHEME_RE = re.compile(r"\b(op://|keychain://)\S*")
+
+# Operator-narrative-leak heuristics — a SMALL set of phrases that
+# always indicate personal-life narrative slipped into a public-mechanism
+# doc. Trade-off: high-confidence + low-noise. Operator-SPECIFIC patterns
+# (names, contact handles, internal bucket names) live in the gitignored
+# ``boundary_check_private_terms.txt`` and use the same rule name when
+# they fire. Don't add operator-specific names here — public file stays
+# vendor-neutral.
+NARRATIVE_LEAK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # "the operator's <family-relation>" — these are NEVER appropriate
+    # in public mechanism code or design docs.
+    re.compile(
+        r"\bthe\s+operator['’]s\s+"
+        r"(wife|husband|spouse|partner|fianc[ée]e?|girlfriend|boyfriend|"
+        r"mother|father|mom|dad|parents?|sister|brother|sibling|"
+        r"daughter|son|child|children|kid|kids|family|cousin|aunt|uncle|"
+        r"in-?law)\b",
+        re.IGNORECASE,
+    ),
+    # Possessive proper-name shapes WHERE the noun signals a personal
+    # narrative — e.g. "Lutz's wife", "Isabelle's setup", "Chris's
+    # workflow". Capitalized-first-letter possessive followed by a
+    # personal-narrative noun. Carefully scoped to avoid false-positive
+    # technical possessives like "Slack's API" or "Pydantic's model".
+    re.compile(
+        r"\b[A-Z][a-z]{2,}['’]s\s+"
+        r"(wife|husband|spouse|partner|fianc[ée]e?|girlfriend|boyfriend|"
+        r"mother|father|mom|dad|sister|brother|"
+        r"daughter|son|kid|kids|family|"
+        r"setup|machine|laptop|inbox|calendar|contacts|notes|journal|"
+        r"vault|keychain|workspace|home)\b"
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -190,12 +231,38 @@ def _scan_private_terms(
     relpath: str, line_no: int, line: str,
     private_terms: list[re.Pattern[str]],
 ) -> list[Violation]:
+    """Scan one line against the operator's private-term patterns.
+
+    Both this scan AND ``_scan_narrative_leaks`` report under the same
+    rule name (``operator-narrative-leak``) — the operator should see
+    "narrative leak" regardless of whether the trigger was the public
+    family-relation heuristic or a private-term pattern they declared.
+    """
     out: list[Violation] = []
     for pattern in private_terms:
         for match in pattern.finditer(line):
             out.append(Violation(
-                relpath, line_no, "private-term",
-                f"matched {pattern.pattern!r}: {match.group(0)}",
+                relpath, line_no, "operator-narrative-leak",
+                f"matched private term {pattern.pattern!r}: {match.group(0)}",
+            ))
+    return out
+
+
+def _scan_narrative_leaks(
+    relpath: str, line_no: int, line: str,
+) -> list[Violation]:
+    """Scan one line against the public narrative-leak heuristics.
+
+    Vendor-neutral patterns only — operator-specific names go in
+    ``boundary_check_private_terms.txt``. False positives are possible
+    on these heuristics; if one fires on legitimate prose, rephrase.
+    """
+    out: list[Violation] = []
+    for pattern in NARRATIVE_LEAK_PATTERNS:
+        for match in pattern.finditer(line):
+            out.append(Violation(
+                relpath, line_no, "operator-narrative-leak",
+                f"prose pattern: {match.group(0)}",
             ))
     return out
 
@@ -284,6 +351,12 @@ def scan_file(
         clean = line.rstrip("\n")
         if not skip_standard_rules:
             violations.extend(scan_line(rel, line_no, clean))
+        # Narrative-leak heuristics + private-term patterns ALWAYS run,
+        # even in allowlisted files. Operator data should never appear
+        # in PUBLIC prose, regardless of whether a file is exempt from
+        # the standard rules (markdown docs are the historical leak
+        # surface).
+        violations.extend(_scan_narrative_leaks(rel, line_no, clean))
         if private_terms:
             violations.extend(_scan_private_terms(rel, line_no, clean, private_terms))
     return violations
@@ -295,24 +368,34 @@ def scan(
 ) -> list[Violation]:
     violations: list[Violation] = []
     private_terms = private_terms or []
+    # Files that contain the linter's own trigger examples — they MUST
+    # carry rule-positive content to test each rule (or document what
+    # the rule catches), so the linter exempts them from EVERY rule
+    # (including the narrative-leak rule which normally still fires in
+    # allowlisted files).
+    LINTER_SELF_TEST_FILES = frozenset({
+        "scripts/boundary_check.py",
+        "tests/runtime/test_boundary_check.py",
+        "boundary_check_private_terms.example.txt",
+    })
     for path in files:
         rel = path.relative_to(root).as_posix()
         if rel == ALLOWLIST_FILENAME:
             continue
         if rel == PRIVATE_TERMS_FILENAME:
             continue
-        if rel == "scripts/boundary_check.py":
+        if rel in LINTER_SELF_TEST_FILES:
             continue
         if rel in allowlist:
             # Allowlisted files skip the standard rules but STILL get
-            # scanned for operator-specific private terms — those are
-            # narrative leaks the allowlist isn't meant to permit.
-            if private_terms:
-                violations.extend(scan_file(
-                    path, root=root,
-                    private_terms=private_terms,
-                    skip_standard_rules=True,
-                ))
+            # scanned for operator-narrative leaks (public heuristics +
+            # private terms). Allowlist exempts a file from the
+            # generic rules; it does NOT permit personal narrative.
+            violations.extend(scan_file(
+                path, root=root,
+                private_terms=private_terms,
+                skip_standard_rules=True,
+            ))
             continue
         violations.extend(scan_file(
             path, root=root, private_terms=private_terms,
@@ -338,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  slack-channel-non-placeholder  placeholders: {sorted(ALLOWED_SLACK_CHANNELS)}")
         print(f"  phone-number")
         print(f"  secret-scheme-reference    (op:// | keychain://)")
+        print(f"  operator-narrative-leak    public family-relation heuristics + private terms")
+        print(f"                             (private file: {PRIVATE_TERMS_FILENAME!r}, gitignored)")
         return 0
 
     root: Path = args.root.resolve()

@@ -6,8 +6,8 @@ the skill visible to the runtime.
 
 Usage:
     python -m scripts.promote_skill \\
-        --incoming-dir ~/Lutz_Dev/SAI/skills/incoming/some-draft/ \\
-        --target-dir   ~/Lutz_Dev/SAI/skills/some-workflow/
+        --incoming-dir $SAI_PRIVATE/skills/incoming/some-draft/ \\
+        --target-dir   $SAI_PRIVATE/skills/some-workflow/
 """
 
 from __future__ import annotations
