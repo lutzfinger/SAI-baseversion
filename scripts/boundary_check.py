@@ -54,7 +54,7 @@ ALLOWED_SLACK_CHANNELS = frozenset({
     # operator can override via private overlay.
     "#sai-eval", "#sai-cost", "#sai-metrics", "#sai-dashboard",
     "#sai-status", "#sai-errors", "#sai-denied", "#sai-feedback",
-    "#sai-tracing-feedback",
+    "#sai-tracing-feedback", "#sai-rag",
 })
 
 # Binary / build artifact extensions that shouldn't be scanned.

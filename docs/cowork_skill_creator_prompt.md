@@ -112,7 +112,10 @@ say:
 
 ### What a skill CANNOT add (primitive — red light, refuse and redirect):
 
-- A RAG retriever / vector store / embedding pipeline
+- A new RAG primitive (vector store backend, chunker, re-ranker —
+  the basic RAG primitive shipped 2026-05-04; see `app/rag/` and
+  `docs/design_rag_primitive.md`. Skills compose it via
+  `from app.rag import query, ChromaVectorStore`.)
 - A new LLM Provider class (new vendor or non-trivial wrapper)
 - A new tier kind (anything beyond `rules` / `classifier` /
   `local_llm` / `cloud_llm` / `agent` / `second_opinion` /
@@ -233,6 +236,26 @@ Configured via YAML in `prompts/email/keyword-classify.md` in the
 operator's private overlay. The skill-creator references matchers
 by NAME; the actual sender names / subject prefixes / keywords
 live private (per #17 — values are operator-specific).
+
+#### RAG primitive (`app/rag/`)
+
+Vendor-portable retrieval over the operator's content. Optional
+dependency (`pip install -e '.[rag]'`); skills that don't need RAG
+don't pay the ~80MB chromadb cost.
+
+| Primitive | Purpose | Skill use |
+|---|---|---|
+| `VectorStore` (Protocol) | Vendor-portable interface | Skills depend on the protocol; backend is config-swappable |
+| `ChromaVectorStore` | Persistent Chroma backend | `ChromaVectorStore(persist_path=..., collection_name=...)` — uses chromadb's default embedding (`all-MiniLM-L6-v2`, 384-dim) which matches operator's existing indexes |
+| `query` | Top-N similarity search | `from app.rag import query; results = query(store=store, question=..., n_results=5, max_distance=0.5)` — returns `list[QueryResult]` (typed Pydantic) |
+| `build_or_update_index` | Incremental indexer | CLI invocation: `python -m scripts.sai_rag_index --content-root <dir> --persist-path <dir> --collection <name>`. Idempotent — only re-embeds changed files |
+| `Document` / `QueryResult` | Typed chunks + hits | All RAG I/O uses these (per #6a — no raw dicts) |
+
+For agent tiers querying RAG via Slack: see
+`app/agents/rag_tools.py` (`query_rag` + `list_rag_collections`
+tools). Channel registry already has the `rag_query` topic in
+`#sai-rag`; the operator's RAG skill wires its `RagToolContext`
+with the operator's collections.
 
 #### Skill-protocol primitives (`app/skills/`)
 

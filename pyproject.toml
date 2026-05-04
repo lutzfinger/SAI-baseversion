@@ -51,6 +51,11 @@ dev = [
   "pytest-xdist>=3.6,<4.0",
   "ruff>=0.11,<1.0",
 ]
+# RAG primitive (app/rag/) — opt-in. Skills that declare a rag_query
+# tier inherit the dependency. Non-RAG installs skip it.
+rag = [
+  "chromadb>=1.0,<2.0",
+]
 
 [project.scripts]
 sai-api = "app.main:main"
@@ -65,6 +70,7 @@ packages = [
   "app.control_plane",
   "app.learning",
   "app.observability",
+  "app.rag",
   "app.reflection",
   "app.runtime",
   "app.shared",

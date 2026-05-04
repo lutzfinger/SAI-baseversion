@@ -80,6 +80,21 @@ channels:
           - format_report
         description: "Read-only metric query (P/R, regression status, dataset health)"
 
+  # RAG retrieval channel. Operator types a question; the agent
+  # queries the operator's RAG index (e.g. their writing corpus,
+  # course materials, archived briefings) and returns top-N relevant
+  # passages with source citations. Read-only — no proposals, no
+  # external side effects.
+  sai-rag:
+    description: "Question / answer over the operator's private RAG index (read-only)"
+    allowed_topics:
+      - kind: rag_query
+        risk_class: low
+        tools:
+          - query_rag
+          - list_rag_collections
+        description: "Run a similarity query against a configured RAG collection. Returns top-N passages with source paths. The operator's question + the agent's distilled answer go to the channel; underlying chunks are read-only retrieval. Risk class is low (not minimal) because the retrieval surfaces operator-private content; the channel itself is the access-control boundary."
+
 # New channels added below. Until an entry exists here, the bot
 # refuses every message on that channel — even if the operator types
 # in it. This is the fail-closed default for #16i.
