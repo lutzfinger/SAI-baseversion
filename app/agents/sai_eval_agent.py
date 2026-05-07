@@ -93,6 +93,7 @@ class AgentInvocation:
     model_used: str
     iterations: int = 0
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    full_tool_calls: list[dict[str, Any]] = field(default_factory=list)  # untruncated, for RL
     final_text: str = ""
     final_proposal_id: Optional[str] = None
     cost_usd: float = 0.0
@@ -286,6 +287,7 @@ def run_agent(
     invocation.final_text = final_text or _fallback()
     invocation.final_proposal_id = final_proposal_id
     _write_audit(audit_path, invocation)
+    _try_capture_trajectory(invocation, system_prompt, audit_path)
 
     return AgentResult(
         operator_message=final_text or _fallback(),
@@ -461,24 +463,79 @@ def _audit_on_llm_end(handler: Any, response: Any) -> None:
 
 def _audit_on_tool_start(handler: Any, serialized: dict, input_str: str) -> None:
     name = (serialized or {}).get("name", "?")
+    now = datetime.now(UTC).isoformat()
     handler.invocation.tool_calls.append({
         "tool": name,
         "args_truncated": str(input_str)[:600],
-        "at": datetime.now(UTC).isoformat(),
+        "at": now,
         "result_truncated": "(pending)",
+    })
+    handler.invocation.full_tool_calls.append({
+        "tool": name,
+        "args": str(input_str),
+        "at": now,
+        "result": "(pending)",
+        "error": None,
     })
 
 
 def _audit_on_tool_end(handler: Any, output: Any) -> None:
     if handler.invocation.tool_calls:
         handler.invocation.tool_calls[-1]["result_truncated"] = str(output)[:1500]
+    if handler.invocation.full_tool_calls:
+        handler.invocation.full_tool_calls[-1]["result"] = str(output)
 
 
 def _audit_on_tool_error(handler: Any, error: Exception) -> None:
+    msg = f"ERROR: {type(error).__name__}: {error}"
     if handler.invocation.tool_calls:
-        handler.invocation.tool_calls[-1]["result_truncated"] = (
-            f"ERROR: {type(error).__name__}: {error}"
+        handler.invocation.tool_calls[-1]["result_truncated"] = msg
+    if handler.invocation.full_tool_calls:
+        handler.invocation.full_tool_calls[-1]["result"] = msg
+        handler.invocation.full_tool_calls[-1]["error"] = msg
+
+
+def _try_capture_trajectory(
+    invocation: AgentInvocation,
+    system_prompt: str,
+    audit_path: Path,
+) -> None:
+    """Write a RawTrajectory alongside the audit row. Non-fatal — swallows all errors."""
+    try:
+        from datetime import UTC, datetime as _dt
+
+        from app.rl.models import TrajectoryStep
+        from app.rl.trajectory import RawTrajectory, TrajectoryStore
+
+        steps = [
+            TrajectoryStep(
+                tool_name=tc.get("tool", "?"),
+                args=tc.get("args", ""),
+                result=tc.get("result", ""),
+                at=_dt.fromisoformat(tc.get("at", _dt.now(UTC).isoformat())),
+                error=tc.get("error"),
+            )
+            for tc in invocation.full_tool_calls
+        ]
+
+        trajectory = RawTrajectory(
+            invocation_id=invocation.invocation_id,
+            workflow_id="sai-eval",
+            system_prompt=system_prompt,
+            user_message=invocation.source_text,
+            steps=steps,
+            final_response=invocation.final_text,
+            model_used=invocation.model_used,
+            cost_usd=invocation.cost_usd,
+            started_at=_dt.fromisoformat(invocation.started_at),
+            completed_at=_dt.now(UTC),
+            terminated_reason=invocation.terminated_reason,
         )
+
+        store = TrajectoryStore(root=audit_path.parent / "trajectories")
+        store.append(trajectory)
+    except Exception as exc:
+        LOGGER.debug("RL trajectory capture skipped: %s", exc)
 
 
 def _write_audit(audit_path: Path, invocation: AgentInvocation) -> None:
