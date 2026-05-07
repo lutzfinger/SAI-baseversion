@@ -175,10 +175,12 @@ def run_agent(
         _write_audit(audit_path, invocation)
         return AgentResult(
             operator_message=(
-                "My system prompt failed hash verification — refusing to "
-                "run rather than use untrusted instructions. Re-merge the "
-                "runtime (`sai-overlay merge`) or refresh "
-                "`prompts/prompt-locks.yaml` after reviewing the change."
+                "I'm offline for a moment — a safety check is asking me to wait.\n"
+                "My instructions don't match the version that was last reviewed, "
+                "so I'm staying quiet rather than acting on something that might "
+                "have drifted. This usually clears up after the runtime is "
+                "re-merged (`sai-overlay merge`) or the prompt-lock file is "
+                "refreshed. Try me again once that's done — same message works."
             ),
             invocation=invocation,
         )
