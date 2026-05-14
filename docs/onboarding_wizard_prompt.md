@@ -150,7 +150,7 @@ OP_SERVICE_ACCOUNT_TOKEN="keychain://sai/onepassword_service_account_token"  # i
 
 If backend = (a), also generate `~/.config/sai/op.env`:
 ```env
-# 1Password references — resolved by scripts/with_1password.sh
+# 1Password references — resolved by scripts/with_runtime_env.sh
 ANTHROPIC_API_KEY="op://<vault>/<item>/<field>"
 OPENAI_API_KEY="op://<vault>/<item>/<field>"
 SAI_SLACK_BOT_TOKEN="op://<vault>/<item>/<field>"
@@ -185,7 +185,7 @@ Walk through:
    `~/Library/Application Support/SAI/credentials/google_client_secret.json`
 5. Run:
    ```bash
-   bash scripts/with_1password.sh .venv/bin/python -m scripts.auth_gmail \
+   bash scripts/with_runtime_env.sh .venv/bin/python -m scripts.auth_gmail \
        --workflow-id email-triage-gmail
    ```
 6. Operator's browser opens; they authenticate; token lands at
@@ -211,8 +211,8 @@ Walk through:
 > local HTTP chat at http://127.0.0.1:8765 instead."
 
 Branch:
-- Yes → walk through Slack app creation (paste the manifest from
-  `docs/slack_bot_setup.md`), get bot + app tokens, store via
+- Yes → walk through Slack app creation (follow
+  `docs/slack_bot_install.md`), get bot + app tokens, store via
   the chosen backend.
 - No → set `SAI_SLACK_DISABLED=true` in runtime.env (the bot
   exits early with a "use http chat" message).
@@ -233,8 +233,8 @@ Walk them through:
 
 Emit `~/Lutz_Dev/SAI/prompts/email/keyword-classify.md` (or
 the equivalent in their layout) using the template in
-`prompts/email/keyword-classify.md.example` (TBD — operator to
-provide).
+`prompts/email/keyword-classify.md.example` as the starting
+shape, then substitute the user's buckets + sender patterns.
 
 Run the canary regenerator:
 ```bash
@@ -250,7 +250,7 @@ Verify N canaries written, all pass:
 
 Pull 5 recent emails and classify them:
 ```bash
-bash scripts/with_1password.sh .venv/bin/python -m scripts.backtest_email_classifier \
+bash scripts/with_runtime_env.sh .venv/bin/python -m scripts.regression_test_email_classifier \
     --limit 5 --dry-run
 ```
 
@@ -268,14 +268,16 @@ If green: proceed. If red: loop back to Q7 to refine the taxonomy.
 
 > "If you want SAI to tag emails automatically as they arrive, we'll
 > set up a launchd job that runs every 10 minutes. Otherwise you
-> can invoke `python -m scripts.run_tag_new_inbox_scheduled` manually
+> can invoke `bash scripts/run_tag_new_inbox_scheduled.sh` manually
 > when you want."
 
 Branch:
-- Yes → install launchd plist (paste the next two as separate
-  one-liners; do NOT include any `#` comment lines):
+- Yes → render and load the launchd plist from the template
+  (`scripts/launchd/com.sai.tag-new-inbox.plist.template`). Paste
+  the next two as separate one-liners; do NOT include any `#`
+  comment lines:
   ```bash
-  cp "$SAI_PRIVATE_REPO/scripts/launchd/com.sai.tag-new-inbox.plist" "$HOME/Library/LaunchAgents/com.sai.tag-new-inbox.plist"
+  sed -e "s|__SAI_REPO_ROOT__|$PWD|g" -e "s|__SAI_LOG_DIR__|$HOME/Library/Logs/SAI|g" scripts/launchd/com.sai.tag-new-inbox.plist.template > "$HOME/Library/LaunchAgents/com.sai.tag-new-inbox.plist"
   ```
   ```bash
   launchctl load -w "$HOME/Library/LaunchAgents/com.sai.tag-new-inbox.plist"
@@ -313,8 +315,12 @@ launchd-managed slack bot.
 >      b. Hand to **Claude Code**: it runs `validate_skill_manifest`,
 >         hashes any new prompts, then promotes the draft to
 >         `~/Lutz_Dev/SAI/skills/<workflow_id>/` once green.
->      c. Re-merge the overlay (`make overlay-merge`); the running
->         bot picks up the new skill on next reload.
+>      c. If you maintain a private operator overlay on top of the
+>         public framework, re-run your overlay's merge step (e.g.
+>         the operator workspace's `make overlay-merge` target) so
+>         the running bot picks up the new skill on next reload.
+>         If you only run the public framework, skip step c — the
+>         skill is already in place.
 >
 >    Claude Code does NOT redesign the skill — if you want to
 >    change cascade shape or tier balance, go back to Co-Work.
@@ -358,8 +364,8 @@ launchd-managed slack bot.
 | `ModuleNotFoundError: slack_bolt` | private pyproject missing dep | `.venv/bin/pip install slack-bolt` |
 | `Unsupported parameter: temperature` | gpt-5 model rejecting param | switch to a non-reasoning model OR use Claude |
 | OAuth flow returns "redirect URI mismatch" | Google Cloud creds set as Web app, not Desktop | recreate creds as Desktop app |
-| `op://` references resolve as None | `OP_SERVICE_ACCOUNT_TOKEN` not in env | check `with_1password.sh` is wrapping the command |
-| Canary regen fails with `level1_fallback not in Literal` | taxonomy has a bucket not in `Level1Classification` | add the bucket to `app/workers/email_models.py` (or wait for the dynamic-taxonomy fix; MVP-GAPS Gap 10) |
+| `op://` references resolve as None | `OP_SERVICE_ACCOUNT_TOKEN` not in env | check `with_runtime_env.sh` is wrapping the command |
+| Canary regen fails with `level1_fallback not in Literal` | taxonomy has a bucket not in `Level1Classification` | add the bucket to `app/workers/email_models.py` (dynamic-taxonomy support is on the roadmap; see `MIGRATION-BACKLOG.md`) |
 
 If you hit one of these or anything else not listed: stop, dump
 the error verbatim, and ask the user to share it. Don't guess.

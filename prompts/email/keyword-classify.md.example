@@ -1,0 +1,87 @@
+---
+# Starter taxonomy template — emitted by the SAI onboarding wizard.
+#
+# COPY this file to `prompts/email/keyword-classify.md` and edit:
+#   - replace the placeholder buckets with 5-7 categories that match
+#     how YOU actually sort email today
+#   - for each bucket, list a few SENDER patterns (full addresses or
+#     bare domains) that should ALWAYS land there
+#   - keep `no_label` (or rename it) as the catch-all fallback
+#
+# All example domains below use the IETF reserved `example.com` /
+# `example.org` / `test` namespaces. Substitute real domains only in
+# your private operator overlay, never in the public repo.
+#
+# This file is a STARTER. Once your taxonomy is firing well you can
+# move richer rules (regex, header matches, label-overrides) into a
+# proper skill manifest — see `app/skills/sample_echo_skill/skill.yaml`
+# for the full plug-in protocol shape (PRINCIPLES.md §33).
+
+prompt_id: keyword_email_classifier_starter_example
+version: "1"
+description: |
+  Multi-bucket keyword-classifier template. Replace the placeholder
+  buckets below with your real categories before deploying.
+
+classifier:
+  # ---- bucket 1: customers ----
+  customers_sender_emails: []
+  customers_sender_domains:
+    - customer-a.example.com
+    - customer-b.example.org
+  customers_subject_keywords:
+    - support ticket
+    - renewal
+
+  # ---- bucket 2: partners ----
+  partners_sender_emails: []
+  partners_sender_domains:
+    - partner-a.example.com
+  partners_subject_keywords: []
+
+  # ---- bucket 3: personal ----
+  personal_sender_emails: []
+  personal_sender_domains:
+    - family.example.org
+  personal_subject_keywords: []
+
+  # ---- bucket 4: finance ----
+  finance_sender_emails: []
+  finance_sender_domains:
+    - bank.example.com
+    - billing.example.com
+  finance_subject_keywords:
+    - invoice
+    - statement
+    - receipt
+
+  # ---- bucket 5: newsletters ----
+  newsletter_sender_emails: []
+  newsletter_sender_domains:
+    - substack.com
+    - beehiiv.com
+  newsletter_subject_keywords:
+    - newsletter
+    - unsubscribe
+    - digest
+    - briefing
+
+  # ---- fallback ----
+  # When no rule fires, the cascade resolves to this bucket. Rename
+  # if you prefer a different label, but keep exactly ONE fallback.
+  no_label_bucket: no_label
+---
+Use only the classifier config and the message metadata.
+
+This tool is intentionally narrow:
+- only obvious sender-email rules
+- only obvious sender-domain rules
+- only obvious subject keywords per bucket
+
+If no rule clearly matches, fall back to:
+- `level1_classification = <no_label_bucket>`
+- `level2_intent = others`
+
+Do not infer nuanced human intent here. Nuance happens at the LLM
+tier of the cascade, not at this rules tier.
+---
