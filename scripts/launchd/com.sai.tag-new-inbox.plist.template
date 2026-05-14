@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SAI scheduled inbox-tagger launchd agent template.
+
+  This file is a TEMPLATE. To install:
+
+    # Render template with your paths
+    REPO_ROOT="$HOME/sai-baseversion"             # ← set to your SAI clone
+    LOG_DIR="$HOME/Library/Logs/SAI"              # ← keep default unless overridden
+
+    sed -e "s|__SAI_REPO_ROOT__|$REPO_ROOT|g" \
+        -e "s|__SAI_LOG_DIR__|$LOG_DIR|g" \
+        scripts/launchd/com.sai.tag-new-inbox.plist.template \
+        > ~/Library/LaunchAgents/com.sai.tag-new-inbox.plist
+
+    # Load it (runs every 10 minutes)
+    launchctl load -w ~/Library/LaunchAgents/com.sai.tag-new-inbox.plist
+
+    # To stop:
+    launchctl unload ~/Library/LaunchAgents/com.sai.tag-new-inbox.plist
+
+  The agent runs `scripts/run_tag_new_inbox_scheduled.sh` which pulls
+  newly-arrived Gmail messages, walks them through the cascade, and
+  applies the chosen L1 label. The script is lock-protected, so even
+  if launchd over-fires you won't get overlapping runs.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.sai.tag-new-inbox</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__SAI_REPO_ROOT__/scripts/run_tag_new_inbox_scheduled.sh</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>__SAI_LOG_DIR__/scheduled/launchd_tag_new_inbox.err.log</string>
+	<key>StandardOutPath</key>
+	<string>__SAI_LOG_DIR__/scheduled/launchd_tag_new_inbox.out.log</string>
+	<key>StartInterval</key>
+	<integer>600</integer>
+	<key>WorkingDirectory</key>
+	<string>__SAI_REPO_ROOT__</string>
+</dict>
+</plist>
