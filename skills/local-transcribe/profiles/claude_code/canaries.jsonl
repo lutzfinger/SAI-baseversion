@@ -1,0 +1,3 @@
+{"id": "c1_transcribe_file_triggers", "input": {"user_message": "transcribe this audio file ~/Downloads/talk.mp3"}, "expected_invokes_skill": "local-transcribe", "notes": "Single-file transcription request — must trigger."}
+{"id": "c2_transcribe_folder_triggers", "input": {"user_message": "run whisper on all the episodes in this folder"}, "expected_invokes_skill": "local-transcribe", "notes": "Batch transcription of a directory — must trigger."}
+{"id": "c3_unrelated_skips", "input": {"user_message": "draft a tweet about our launch"}, "expected_invokes_skill": null, "notes": "No audio/transcription involved — must not trigger."}

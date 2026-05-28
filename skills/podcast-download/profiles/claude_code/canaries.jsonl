@@ -1,0 +1,3 @@
+{"id": "c1_download_podcast_triggers", "input": {"user_message": "download this podcast https://open.spotify.com/show/<id>"}, "expected_invokes_skill": "podcast-download", "notes": "Direct download-a-podcast request from a Spotify show URL — must trigger."}
+{"id": "c2_grab_episodes_triggers", "input": {"user_message": "grab all episodes of this RSS feed and save the mp3s"}, "expected_invokes_skill": "podcast-download", "notes": "Episode-fetch from a feed — must trigger."}
+{"id": "c3_unrelated_skips", "input": {"user_message": "summarize my unread emails"}, "expected_invokes_skill": null, "notes": "Nothing to do with podcasts — must not trigger."}
