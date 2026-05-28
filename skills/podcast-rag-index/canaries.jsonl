@@ -1,0 +1,2 @@
+{"name": "missing_input_dir_escalates", "inputs": {"input_dir": "/tmp/_no_such_dir", "indexer_scripts": "/tmp/_indexer"}, "expect": {"final_verdict": "escalate"}}
+{"name": "indexer_required_fail_closed", "inputs": {"input_dir": "/tmp/_some_dir"}, "expect": {"final_verdict": "escalate", "reason_contains": "locate_indexer"}}

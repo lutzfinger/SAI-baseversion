@@ -1,0 +1,3 @@
+{"name": "consumes_podcast_download_manifest", "inputs": {"manifest_path": "/tmp/_show/manifest.json", "output_dir": "/tmp/_show/transcripts", "source_label": "Podcast"}, "expect": {"final_verdict_in": ["ready_to_propose", "escalate"], "frontmatter_keys": ["title", "date", "url", "show_title", "episode_id"]}}
+{"name": "frontmatter_compatible_with_index_py", "inputs": {"audio_path": "/tmp/_sample.mp3", "output_dir": "/tmp/_regression_fm"}, "expect": {"md_has_yaml_frontmatter": true}}
+{"name": "language_override_passes_through", "inputs": {"audio_path": "/tmp/_sample.mp3", "output_dir": "/tmp/_regression_lang", "language": "en"}, "expect": {"language_in_frontmatter": "en"}}

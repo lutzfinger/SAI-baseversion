@@ -1,0 +1,2 @@
+{"name": "no_inputs_escalates", "inputs": {"output_dir": "/tmp/_canary_no_input"}, "expect": {"final_verdict": "escalate"}}
+{"name": "backend_resolves", "inputs": {"audio_dir": "/tmp/_no_such_dir", "output_dir": "/tmp/_canary_trans"}, "expect": {"audit_contains_tier": "pick_backend", "backend_in": ["mlx-whisper", "faster-whisper"]}}

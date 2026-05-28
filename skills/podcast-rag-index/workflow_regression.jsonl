@@ -1,0 +1,3 @@
+{"name": "config_path_resolves_and_indexes", "inputs": {"input_dir": "/tmp/_show/transcripts", "config_path": "/tmp/_podcast_ingest.yaml"}, "expect": {"final_verdict_in": ["ready_to_propose", "escalate"]}}
+{"name": "chain_from_local_transcribe", "inputs": {"input_dir": "/tmp/_show/transcripts", "indexer_scripts": "/tmp/_indexer"}, "expect": {"audit_tiers": ["locate_indexer", "scan_inputs", "run_indexer"]}}
+{"name": "force_then_normal_idempotent", "inputs": {"input_dir": "/tmp/_show/transcripts", "indexer_scripts": "/tmp/_indexer", "manifest_path": "/tmp/_manifest.json", "force": true}, "expect": {"second_run_skipped_min": 0}}

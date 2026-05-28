@@ -1,0 +1,3 @@
+{"name": "manifest_round_trip", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_regression_mft", "max_episodes": 2}, "expect": {"manifest_contains": ["workflow_id", "episodes", "download_results"]}}
+{"name": "ready_to_propose_on_parseable_feed", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_regression_ok", "max_episodes": 1}, "expect": {"final_verdict_in": ["ready_to_propose", "escalate"]}}
+{"name": "date_filter_pushes_recent_first", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_regression_date", "since_date": "2000-01-01"}, "expect": {"episodes_sorted_desc_by_pub_date": true}}

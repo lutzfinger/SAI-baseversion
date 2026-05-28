@@ -1,0 +1,2 @@
+{"name": "missing_inputs_escalates", "inputs": {"output_dir": "/tmp/_canary_missing"}, "expect": {"final_verdict": "escalate", "reason_contains": "missing_input"}}
+{"name": "bad_feed_url_escalates", "inputs": {"feed_url": "https://example.com/does-not-exist.xml", "output_dir": "/tmp/_canary_badfeed"}, "expect": {"final_verdict": "escalate"}}

@@ -1,0 +1,69 @@
+schema_version: "1"
+
+identity:
+  workflow_id: podcast-rag-index
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Atomic SAI skill. Adds a directory of transcript Markdown files (with
+    YAML frontmatter) to an existing ChromaDB RAG index by delegating to a
+    rag-index-updater-style index.py. Pure mechanism — no operator paths or
+    collection name baked in; the caller supplies indexer_scripts /
+    manifest_path directly or via a private config_path YAML. Hash-compares
+    against the manifest so unchanged files are skipped automatically.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "agent or operator CLI"
+
+cascade:
+  - tier_id: locate_indexer
+    kind: rules
+    config:
+      # No operator paths here — indexer_scripts comes from inputs or the
+      # caller's private config_path (see README). Fail-closed if unset.
+      source: input_or_config
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: scan_inputs
+    kind: rules
+    config:
+      skip_if_unchanged: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: run_indexer
+    kind: rules
+    config:
+      # collection + embedding model are owned by the operator's index.py,
+      # not by this skill. chunk sizes shown for reference only.
+      chunk_tokens: 500
+      overlap_tokens: 50
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - { kind: canaries,   path: canaries.jsonl,            min_count: 1, fail_mode: hard_fail }
+    - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+    - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+
+outputs:
+  - name: chromadb_upsert
+    side_effect: local_write
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.10   # voyage-3 embeddings if available
+  iteration_cap: 1
+  daily_invocation_cap: 50
+  audit_log_path: "~/Library/Logs/SAI/podcast-rag-index.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true

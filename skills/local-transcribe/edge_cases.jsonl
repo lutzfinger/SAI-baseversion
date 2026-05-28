@@ -1,0 +1,4 @@
+{"name": "empty_dir_escalates", "inputs": {"audio_dir": "/tmp/_empty_dir_does_not_exist", "output_dir": "/tmp/_edge_empty"}, "expect": {"final_verdict": "escalate"}}
+{"name": "non_audio_files_ignored", "inputs": {"audio_dir": "/tmp/_mixed_dir", "output_dir": "/tmp/_edge_mixed"}, "expect": {"audit_contains_tier": "collect_inputs"}}
+{"name": "resume_skips_existing_md", "inputs": {"audio_dir": "/tmp/_already_done", "output_dir": "/tmp/_edge_resume"}, "expect": {"skipped_count_min": 0}}
+{"name": "whisper_repeat_collapse_keeps_real_content", "inputs": {"audio_path": "/tmp/_sample.mp3", "output_dir": "/tmp/_edge_collapse"}, "expect": {"max_consecutive_repeat_token": 3}}

@@ -195,3 +195,121 @@ tools:
     retryable: true
     idempotent: true
     data_sensitivity: moderate
+
+  - kind: podcast_download
+    surface: workflow_callable
+    category: Ingest
+    purpose: Download podcast episode audio from an RSS feed (or a Spotify show URL
+      resolved via iTunes Search). Resume-safe; emits a manifest.json downstream
+      skills consume.
+    input_schema:
+      type: object
+      properties:
+        feed_url: {type: [string, "null"]}
+        spotify_show_url: {type: [string, "null"]}
+        output_dir: {type: string}
+        since_date: {type: [string, "null"]}
+        max_episodes: {type: [integer, "null"]}
+      required: [output_dir]
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [final_verdict, episodes]
+      properties:
+        final_verdict: {type: string}
+        episodes: {type: array}
+        manifest_path: {type: string}
+    effect_class: local_write
+    required_actions: [net.http.get, fs.write]
+    default_policy_mode: allow
+    allowed_connectors: [runtime_only]
+    allowed_targets: [rss feeds, itunes search api, podcast cdns]
+    prompt_requirement: forbidden
+    default_prompt: null
+    failure_modes: [feed_parse_failed, download_failed, could_not_resolve_feed_from_spotify]
+    redaction_rules: []
+    approval_behavior: not_required
+    supports_preview: false
+    retryable: true
+    idempotent: true
+    data_sensitivity: low
+    last_verification_source: runtime_tool_registry
+
+  - kind: local_transcribe
+    surface: workflow_callable
+    category: Ingest
+    purpose: Fully-local Whisper transcription of one audio file, a directory, or a
+      podcast-download manifest. No audio leaves the machine; no API keys. Outputs
+      .md files with YAML frontmatter compatible with the rag-index-updater pipeline.
+    input_schema:
+      type: object
+      properties:
+        audio_path: {type: [string, "null"]}
+        audio_dir: {type: [string, "null"]}
+        manifest_path: {type: [string, "null"]}
+        output_dir: {type: string}
+        model: {type: [string, "null"]}
+        language: {type: [string, "null"]}
+        source_label: {type: [string, "null"]}
+      required: [output_dir]
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [final_verdict, items]
+      properties:
+        final_verdict: {type: string}
+        items: {type: array}
+    effect_class: local_write
+    required_actions: [fs.write, cpu.gpu.compute]
+    default_policy_mode: allow
+    allowed_connectors: []
+    allowed_targets: [local audio files]
+    prompt_requirement: forbidden
+    default_prompt: null
+    failure_modes: [no_audio_inputs, empty_transcript, backend_unavailable]
+    redaction_rules: []
+    approval_behavior: not_required
+    supports_preview: false
+    retryable: true
+    idempotent: true
+    data_sensitivity: low
+    last_verification_source: runtime_tool_registry
+
+  - kind: podcast_rag_index
+    surface: workflow_callable
+    category: Ingest
+    purpose: Add a directory of transcript .md files to an existing ChromaDB RAG
+      index by delegating to a rag-index-updater-style index.py. No operator paths
+      or collection baked in; hash-skips unchanged files.
+    input_schema:
+      type: object
+      properties:
+        input_dir: {type: string}
+        force: {type: [boolean, "null"]}
+        indexer_scripts: {type: [string, "null"]}
+        manifest_path: {type: [string, "null"]}
+        config_path: {type: [string, "null"]}
+      required: [input_dir]
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [final_verdict, indexed_count]
+      properties:
+        final_verdict: {type: string}
+        indexed_count: {type: integer}
+        skipped_count: {type: integer}
+    effect_class: local_write
+    required_actions: [fs.read, fs.write, net.http.post]
+    default_policy_mode: allow
+    allowed_connectors: [runtime_only]
+    allowed_targets: [local chromadb rag index]
+    prompt_requirement: forbidden
+    default_prompt: null
+    failure_modes: [input_dir_missing, indexer_not_found, index_py_failed]
+    redaction_rules: []
+    approval_behavior: not_required
+    supports_preview: false
+    retryable: true
+    idempotent: true
+    data_sensitivity: low
+    last_verification_source: runtime_tool_registry
