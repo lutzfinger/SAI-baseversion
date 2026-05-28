@@ -1,0 +1,23 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-alpha-bad-3
+  version: "0.1.0"
+  owner: framework-tests
+  description: "claude_code profile must not carry cascade/tools/policy slots — validator must refuse."
+
+profiles:
+  claude_code:
+    enabled: true
+    files:
+      - SKILL.md
+    deploy_to: [claude_code]
+    cascade:                      # forbidden on claude_code profile
+      - tier_id: noop
+        kind: rules
+        config: {}
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
+    eval:
+      datasets:
+        - { kind: canaries, path: profiles/claude_code/canaries.jsonl, fail_mode: hard_fail, min_count: 1 }

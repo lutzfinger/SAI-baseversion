@@ -23,22 +23,29 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 # ─── identity ─────────────────────────────────────────────────────────
 
 
 class SkillIdentity(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
+    # PR 1a: accept `skill_id` as an input alias for `workflow_id`. The
+    # cowork/claude_code skill-creator emits `skill_id`; PRINCIPLES §33 and
+    # the rest of SAI use `workflow_id`. AliasChoices lets both parse into
+    # the same canonical field so we don't fork on naming.
     workflow_id: str = Field(
         ..., min_length=3, max_length=80,
+        validation_alias=AliasChoices("workflow_id", "skill_id"),
         description="Unique id (kebab-case). E.g. 'email-triage' or 'sai-eval-agent'.",
     )
     version: str = Field(..., description="Semver (e.g. 1.0.0).")
     owner: str = Field(..., description="User or team responsible (audit trail).")
-    description: str = Field(..., min_length=10, max_length=500)
+    # max_length bumped 500 -> 4000 (PR 1a): real registered skills carry
+    # richer multi-paragraph descriptions; the 500 cap was arbitrary.
+    description: str = Field(..., min_length=10, max_length=4000)
 
 
 # ─── trigger ──────────────────────────────────────────────────────────
@@ -74,6 +81,10 @@ class SkillTrigger(BaseModel):
 TierKind = Literal[
     "rules", "classifier", "local_llm", "cloud_llm", "agent",
     "second_opinion", "human",
+    # Added PR 1a (schema fits reality): real skills use a deterministic
+    # rules gate that escalates to a local LLM only on ambiguity, and a
+    # pure-LLM vision/OCR tier. Both are legitimate cascade kinds.
+    "rules+llm", "llm",
 ]
 
 
@@ -238,6 +249,12 @@ class SkillFeedback(BaseModel):
 
 SideEffect = Literal[
     "label", "reply", "draft", "send", "post", "propose", "none",
+    # Added 2026-05-27 (PR 1a — schema fits reality): real skills produce
+    # side effects the original email/slack-centric literal didn't cover.
+    #   local_write   — atomic skills writing local files (transcripts, manifests)
+    #   file_write    — bookkeeping-rules / log files written during a run
+    #   external_write — QuickBooks Purchases/Invoices and other external mutations
+    "local_write", "file_write", "external_write",
 ]
 
 
@@ -297,12 +314,21 @@ class SkillManifest(BaseModel):
     identity: SkillIdentity
     trigger: SkillTrigger
     cascade: list[CascadeTier] = Field(..., min_length=1)
-    tools: list[ToolDeclaration] = Field(default_factory=list)
+    # PR 1a: tools may be bare registry-id strings OR full ToolDeclaration
+    # dicts. ToolDeclaration is tried first so a full dict isn't stringified.
+    tools: list[Union[ToolDeclaration, str]] = Field(default_factory=list)
     eval: SkillEval
     feedback: SkillFeedback = Field(default_factory=SkillFeedback)
     outputs: list[SkillOutput] = Field(..., min_length=1)
     policy: SkillPolicy = Field(default_factory=SkillPolicy)
     observability: SkillObservability = Field(default_factory=SkillObservability)
+    # PR 1a: optional declarative metadata real skills already carry.
+    auth_preconditions: list[str] = Field(default_factory=list)
+    overlay_required: list[str] = Field(default_factory=list)
+    # Provenance is optional metadata (who designed it, when). Its mere
+    # presence does NOT make a skill a candidate — only failing the schema
+    # while carrying provenance does (see manifest_validator).
+    provenance: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("cascade")
     @classmethod
@@ -314,8 +340,11 @@ class SkillManifest(BaseModel):
 
     @field_validator("tools")
     @classmethod
-    def _tool_ids_unique(cls, v: list[ToolDeclaration]) -> list[ToolDeclaration]:
-        ids = [t.tool_id for t in v]
+    def _tool_ids_unique(
+        cls, v: list[Union[ToolDeclaration, str]]
+    ) -> list[Union[ToolDeclaration, str]]:
+        # A tool entry is either a bare string id or a ToolDeclaration.
+        ids = [t if isinstance(t, str) else t.tool_id for t in v]
         if len(ids) != len(set(ids)):
             raise ValueError(f"tool_ids must be unique; got {ids}")
         return v
@@ -352,3 +381,169 @@ class ValidationReport(BaseModel):
         for issue in self.warnings:
             parts.append(f"  ⚠ {issue.rule}: {issue.message}")
         return "\n".join(parts)
+
+
+# ─── v2 schema: multi-profile skill manifest ─────────────────────────
+#
+# See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md for rationale.
+#
+# v1 (above) = single SAI workflow per skill.yaml. v2 = one skill_id can
+# carry multiple deliverables (e.g., a granola-fetch SAI workflow runner
+# AND a granola-fetch Claude Code SKILL.md prose form). Each deliverable
+# is a "profile" with its own files[], deploy_to[], and eval contract.
+#
+# Backward-compat: a skill.yaml with schema_version="1" (or no profiles:
+# key) is read as an implicit single sai_workflow profile.
+
+import re as _re_v2  # avoid colliding with any future top-level `re` import
+
+
+DeployTarget = Literal["sai_runtime", "claude_code", "cowork"]
+
+
+CLAUDE_CODE_SUBDIR_RE = _re_v2.compile(r"^[A-Z][A-Za-z0-9_-]{0,30}$")
+
+
+class SaiWorkflowProfile(BaseModel):
+    """v2 sai_workflow profile — wraps the v1 SkillManifest body.
+
+    Carries the same #33 slots (trigger/cascade/tools/eval/outputs/policy)
+    plus the v2-only declarative additions (`files`, `deploy_to`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=True)
+    files: list[str] = Field(default_factory=list)
+    deploy_to: list[DeployTarget] = Field(
+        default_factory=lambda: ["sai_runtime"],
+        description=(
+            "Which targets the deploy CLI should write this profile to. "
+            "sai_runtime is the default for SAI workflows; cowork would "
+            "rarely make sense and claude_code is for runner.py-as-CLI "
+            "edge cases."
+        ),
+    )
+
+    # The full #33 contract — same shapes as the v1 SkillManifest.
+    trigger: SkillTrigger
+    cascade: list[CascadeTier] = Field(..., min_length=1)
+    tools: list[Union[ToolDeclaration, str]] = Field(default_factory=list)
+    eval: SkillEval
+    feedback: SkillFeedback = Field(default_factory=SkillFeedback)
+    outputs: list[SkillOutput] = Field(..., min_length=1)
+    policy: SkillPolicy = Field(default_factory=SkillPolicy)
+    observability: SkillObservability = Field(default_factory=SkillObservability)
+
+    @field_validator("cascade")
+    @classmethod
+    def _cascade_has_unique_tier_ids(cls, v: list[CascadeTier]) -> list[CascadeTier]:
+        ids = [t.tier_id for t in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"cascade tier_ids must be unique; got {ids}")
+        return v
+
+    @field_validator("deploy_to")
+    @classmethod
+    def _deploy_to_unique(cls, v: list[DeployTarget]) -> list[DeployTarget]:
+        if len(v) != len(set(v)):
+            raise ValueError(f"deploy_to entries must be unique; got {v}")
+        return v
+
+
+class ClaudeCodeEval(BaseModel):
+    """Eval contract for a claude_code profile.
+
+    Lighter than SkillEval — only canaries are required for Claude Code
+    skills (no cascade exists to need edge_cases/workflow datasets).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    datasets: list[CanariesSpec] = Field(..., min_length=1)
+
+
+class ClaudeCodeProfile(BaseModel):
+    """v2 claude_code profile — prose SKILL.md + assets, no cascade.
+
+    Reject cascade / tools / outputs / policy: those belong to
+    sai_workflow only. A Claude Code skill is invoked by Claude reading
+    SKILL.md, not by the SAI cascade machinery.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=True)
+    files: list[str] = Field(default_factory=list)
+    deploy_to: list[DeployTarget] = Field(
+        default_factory=lambda: ["claude_code"],
+    )
+    claude_code_subdir: Optional[str] = Field(
+        default=None,
+        description=(
+            "If set, deploy claude_code profile under "
+            "~/.claude/skills/<subdir>/<skill_id>/ instead of "
+            "~/.claude/skills/<skill_id>/. Avoids namespace collision "
+            "with the anthropic-skills plugin install."
+        ),
+    )
+    eval: ClaudeCodeEval
+
+    @field_validator("claude_code_subdir")
+    @classmethod
+    def _subdir_shape(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not CLAUDE_CODE_SUBDIR_RE.match(v):
+            raise ValueError(
+                f"claude_code_subdir must match {CLAUDE_CODE_SUBDIR_RE.pattern!r}; "
+                f"got {v!r} (no path chars, no traversal, starts with uppercase)"
+            )
+        return v
+
+    @field_validator("deploy_to")
+    @classmethod
+    def _deploy_to_unique_cc(cls, v: list[DeployTarget]) -> list[DeployTarget]:
+        if len(v) != len(set(v)):
+            raise ValueError(f"deploy_to entries must be unique; got {v}")
+        return v
+
+
+class SkillManifestV2(BaseModel):
+    """v2 manifest — multi-profile container.
+
+    A skill.yaml carries at most one profile of each kind. Both profiles
+    enabled means the same skill_id ships two deliverables (the
+    granola-fetch pattern).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["2"]
+    identity: SkillIdentity
+    profiles: "SkillProfiles"
+    # Optional designer-provenance metadata (see SkillManifest.provenance).
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("profiles")
+    @classmethod
+    def _at_least_one_enabled(cls, v: "SkillProfiles") -> "SkillProfiles":
+        if not (
+            (v.sai_workflow is not None and v.sai_workflow.enabled)
+            or (v.claude_code is not None and v.claude_code.enabled)
+        ):
+            raise ValueError(
+                "at least one profile must be enabled (sai_workflow or claude_code)"
+            )
+        return v
+
+
+class SkillProfiles(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sai_workflow: Optional[SaiWorkflowProfile] = None
+    claude_code: Optional[ClaudeCodeProfile] = None
+
+
+# Forward-ref resolve (SkillProfiles defined after SkillManifestV2 reference).
+SkillManifestV2.model_rebuild()

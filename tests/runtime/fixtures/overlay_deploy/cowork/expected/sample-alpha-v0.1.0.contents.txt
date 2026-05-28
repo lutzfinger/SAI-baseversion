@@ -1,0 +1,14 @@
+# Expected contents of sample-alpha-v0.1.0.skill (output of PR 4 cowork target).
+# Each line: "<archive_path>" -- "sha256 of source file"
+#
+# The PR 4 test reads this file, builds the .skill ZIP, and verifies
+# the ZIP contains EXACTLY these archive paths and each file's hash
+# matches. Strict equality — no extra files, no missing files.
+#
+# Note: skill.yaml is NOT included in the cowork package — it's a
+# framework-side file. Only SKILL.md + references/ go in.
+# profiles/claude_code/canaries.jsonl is also EXCLUDED (eval/* private filter).
+
+sample-alpha/SKILL.md
+sample-alpha/references/note.md
+sample-alpha/package-manifest.json

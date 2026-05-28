@@ -1,0 +1,24 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-glob
+  version: "0.1.0"
+  owner: framework-tests
+  description: |
+    Skill dir on disk to exercise glob expansion. The manifest references
+    references/*.md and the references/ dir contains two .md files; the
+    expanded files[] should include both.
+
+profiles:
+  claude_code:
+    enabled: true
+    files:
+      - SKILL.md
+      - "references/*.md"
+    deploy_to: [claude_code]
+    eval:
+      datasets:
+        - kind: canaries
+          path: profiles/claude_code/canaries.jsonl
+          fail_mode: hard_fail
+          min_count: 1

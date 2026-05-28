@@ -1,0 +1,1 @@
+{"id":"sample-glob-canary-01","input":"hello","expect_substring":"hello"}
