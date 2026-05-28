@@ -743,6 +743,11 @@ def cli(argv: list[str] | None = None) -> int:
         action="store_true",
         help="remove --out path before merging if it exists",
     )
+    p_merge.add_argument(
+        "--verbose",
+        action="store_true",
+        help="list every shadowed file (default: just the count)",
+    )
 
     p_verify = sub.add_parser("verify", help="re-hash a merged runtime")
     p_verify.add_argument("--runtime", required=True, type=Path)
@@ -794,9 +799,12 @@ def cli(argv: list[str] | None = None) -> int:
             return 2
         print(f"merged {r.file_count} files -> {r.out_path}")
         print(f"  mode: {r.mode}")
-        print(f"  shadowed_count: {r.shadowed_count}")
-        for rel in r.shadowed_files:
-            print(f"    private overrides public: {rel}")
+        print(f"  shadowed: {r.shadowed_count} file(s) (private wins over public)")
+        if args.verbose:
+            for rel in r.shadowed_files:
+                print(f"    private overrides public: {rel}")
+        elif r.shadowed_count:
+            print(f"    (pass --verbose to list them)")
         return 0
 
     if args.cmd == "verify":
