@@ -748,6 +748,29 @@ def auto_execute_ad_hoc(*, text: str, overlay: dict, claude_loop_fn: Callable,
                     "'use bob@example.com').", "status_label": "SAI/proposal",
                     "did_write": False, "kind": kind}
         body = plan.get("body") or ""
+        # Independent pre-write sanity gate (#21): a DIFFERENT model than the
+        # Haiku draft-builder checks the recipient is grounded + the body
+        # invents no Forbes claim, BEFORE the draft is created. FAIL →
+        # block + downgrade to SAI/proposal (operator decision 2026-05-28);
+        # a reversible draft to the wrong person is still one click from
+        # being mis-sent, so we hold it rather than create-and-warn.
+        from lib.pre_write_critique import critique_draft
+
+        verdict = critique_draft(
+            request_text=text,
+            recipient_email=to,
+            draft_body=body,
+            candidate_emails=[c.get("from_email", "") for c in cands],
+            forbes_evidence=arts,
+            claude_loop_fn=claude_loop_fn,
+            overlay=overlay,
+        )
+        if verdict.verdict == "failed":
+            return {"reply_text": (
+                        f"Held the draft before saving it — {verdict.reason} "
+                        "Reply with the correct recipient/details and I'll redo it."),
+                    "status_label": "SAI/proposal", "did_write": False,
+                    "kind": kind}
         try:
             create_gmail_draft(to=to, subject=plan.get("subject") or "Re:",
                                body=body)
