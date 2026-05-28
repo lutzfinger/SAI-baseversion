@@ -1,0 +1,74 @@
+schema_version: "1"
+
+identity:
+  workflow_id: local-transcribe
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Atomic SAI skill. Fully-local audio transcription via Whisper. No audio
+    leaves the machine; no API keys. Primary backend is mlx-whisper
+    (Metal-accelerated on Apple Silicon); fallback is faster-whisper on
+    CPU. Inputs are a single audio file, a directory of audio files, or
+    a podcast-download manifest.json. Output is one .md file per input
+    with YAML frontmatter compatible with the rag-index-updater pipeline.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "agent or operator CLI"
+
+cascade:
+  - tier_id: pick_backend
+    kind: rules
+    config:
+      preferred: mlx-whisper
+      fallback: faster-whisper
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: collect_inputs
+    kind: rules
+    config:
+      audio_exts: [".mp3", ".m4a", ".mp4", ".wav", ".ogg", ".aac", ".flac", ".webm"]
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: transcribe_each
+    kind: rules
+    config:
+      default_model_mlx: "mlx-community/whisper-large-v3-mlx"
+      default_model_faster: "large-v3"
+      default_language: "en"
+      skip_if_md_exists: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: summarize
+    kind: rules
+    config: {}
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - { kind: canaries,   path: canaries.jsonl,            min_count: 1, fail_mode: hard_fail }
+    - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+    - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+
+outputs:
+  - name: transcripts
+    side_effect: local_write
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 200
+  audit_log_path: "~/Library/Logs/SAI/local-transcribe.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true

@@ -1,0 +1,4 @@
+{"name": "spotify_bad_id_escalates", "inputs": {"spotify_show_url": "https://open.spotify.com/show/INVALIDIDxxxx", "output_dir": "/tmp/_edge_bad_spotify"}, "expect": {"final_verdict": "escalate"}}
+{"name": "since_date_future_yields_zero", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_edge_since", "since_date": "2099-01-01"}, "expect": {"episode_count": 0}}
+{"name": "max_episodes_cap_respected", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_edge_cap", "max_episodes": 3}, "expect": {"episode_count_max": 3}}
+{"name": "resume_skips_existing_files", "inputs": {"feed_url": "https://example.com/feed.xml", "output_dir": "/tmp/_edge_resume", "max_episodes": 1}, "expect": {"download_results.skipped_or_downloaded_min": 0}}

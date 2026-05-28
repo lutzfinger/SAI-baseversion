@@ -1,0 +1,72 @@
+schema_version: "1"
+
+identity:
+  workflow_id: podcast-download
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Atomic SAI skill. Resolves a podcast (RSS URL or Spotify show URL via
+    iTunes lookup) and downloads any episode audio files not yet on disk.
+    Resume-safe (skips files already present). Emits a manifest.json with
+    every episode's metadata so downstream skills (local-transcribe,
+    podcast-rag-index) can chain off it.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "agent or operator CLI"
+
+cascade:
+  - tier_id: resolve_feed
+    kind: rules
+    config: {}
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: list_episodes
+    kind: rules
+    config:
+      sort: chronological_desc
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: download_each
+    kind: rules
+    config:
+      max_retries: 3
+      resume: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: write_manifest
+    kind: rules
+    config: {}
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - { kind: canaries,   path: canaries.jsonl,            min_count: 1, fail_mode: hard_fail }
+    - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+    - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+
+outputs:
+  - name: audio_files
+    side_effect: local_write
+    requires_approval: false
+  - name: manifest
+    side_effect: local_write
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 50
+  audit_log_path: "~/Library/Logs/SAI/podcast-download.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true

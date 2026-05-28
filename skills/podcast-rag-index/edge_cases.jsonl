@@ -1,0 +1,4 @@
+{"name": "explicit_indexer_missing_escalates", "inputs": {"input_dir": "/tmp/_some_dir", "indexer_scripts": "/tmp/_no_indexer_here"}, "expect": {"final_verdict": "escalate"}}
+{"name": "directory_with_no_md_yields_zero", "inputs": {"input_dir": "/tmp/_no_md_dir", "indexer_scripts": "/tmp/_indexer"}, "expect": {"to_index": 0}}
+{"name": "unchanged_files_skipped_without_force", "inputs": {"input_dir": "/tmp/_indexed_dir", "manifest_path": "/tmp/_manifest.json", "indexer_scripts": "/tmp/_indexer"}, "expect": {"skipped_min": 0}}
+{"name": "config_path_supplies_indexer", "inputs": {"input_dir": "/tmp/_some_dir", "config_path": "/tmp/_podcast_ingest.yaml"}, "expect": {"audit_contains_tier": "locate_indexer"}}
