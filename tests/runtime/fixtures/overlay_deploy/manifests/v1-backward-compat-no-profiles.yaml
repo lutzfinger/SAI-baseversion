@@ -1,0 +1,41 @@
+schema_version: "1"
+
+identity:
+  workflow_id: legacy-skill
+  version: "0.1.0"
+  owner: framework-tests
+  description: |
+    v1 manifest (no profiles: key). Validator must accept this and treat
+    the whole file as an implicit sai_workflow profile (backward compat
+    for existing skills like cornell-delay-triage, receipt-collector).
+
+trigger:
+  kind: manual
+  config:
+    invocation: "python -m skills.legacy-skill.runner"
+
+cascade:
+  - tier_id: noop
+    kind: rules
+    config: { input: ["text"], output: "text" }
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - { kind: canaries,   path: canaries.jsonl,            min_count: 3, fail_mode: hard_fail }
+    - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+    - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+
+outputs:
+  - name: log_written
+    side_effect: none
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  audit_log_path: "~/Library/Logs/SAI/legacy-skill.jsonl"

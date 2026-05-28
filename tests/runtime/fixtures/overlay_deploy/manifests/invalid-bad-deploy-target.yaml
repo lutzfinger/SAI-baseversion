@@ -1,0 +1,17 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-alpha-bad-4
+  version: "0.1.0"
+  owner: framework-tests
+  description: "deploy_to references unknown runtime — validator must refuse."
+
+profiles:
+  claude_code:
+    enabled: true
+    files:
+      - SKILL.md
+    deploy_to: [claude_code, cowork, mars_lander]   # unknown target
+    eval:
+      datasets:
+        - { kind: canaries, path: profiles/claude_code/canaries.jsonl, fail_mode: hard_fail, min_count: 1 }

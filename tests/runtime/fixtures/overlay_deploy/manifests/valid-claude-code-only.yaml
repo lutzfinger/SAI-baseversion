@@ -1,0 +1,22 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-alpha
+  version: "0.1.0"
+  owner: framework-tests
+  description: |
+    Minimal Claude-Code-only skill used to exercise the schema validator.
+
+profiles:
+  claude_code:
+    enabled: true
+    files:
+      - SKILL.md
+      - references/note.md
+    deploy_to: [claude_code, cowork]
+    eval:
+      datasets:
+        - kind: canaries
+          path: profiles/claude_code/canaries.jsonl
+          fail_mode: hard_fail
+          min_count: 1

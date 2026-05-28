@@ -1,0 +1,9 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-alpha-bad-6
+  version: "0.1.0"
+  owner: framework-tests
+  description: "Empty profiles dict — no profile enabled. Validator must refuse."
+
+profiles: {}

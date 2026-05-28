@@ -1,0 +1,44 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-beta
+  version: "0.1.0"
+  owner: framework-tests
+  description: |
+    Minimal SAI-workflow-only skill used to exercise full #33 manifest
+    requirements via the schema_version=2 dispatch.
+
+profiles:
+  sai_workflow:
+    enabled: true
+    files:
+      - runner.py
+      - eval/canaries.jsonl
+      - eval/edge_cases.jsonl
+      - eval/workflow_regression.jsonl
+    deploy_to: [sai_runtime]
+    trigger:
+      kind: manual
+      config:
+        invocation: "python -m skills.sample-beta.runner"
+    cascade:
+      - tier_id: noop
+        kind: rules
+        config: { input: ["text"], output: "text" }
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
+    tools: []
+    eval:
+      datasets:
+        - { kind: canaries,   path: eval/canaries.jsonl,            min_count: 3, fail_mode: hard_fail }
+        - { kind: edge_cases, path: eval/edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+        - { kind: workflow,   path: eval/workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+    outputs:
+      - name: log_written
+        side_effect: none
+        requires_approval: false
+    policy:
+      approval_required: false
+      cost_cap_per_invocation_usd: 0.0
+      iteration_cap: 1
+      audit_log_path: "~/Library/Logs/SAI/sample-beta.jsonl"

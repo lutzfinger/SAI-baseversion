@@ -394,7 +394,78 @@ def merge(
         private_root=private,
     )
     _write_manifest(result)
+
+    # ── PR 1 — non-fatal skill.yaml validation pre-check ────────────────
+    # See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
+    # ~/Claude-Logs/code-plans/2026-05-27-sai-overlay-deploy-pr1-schema-validator.md.
+    # Walks every skill.yaml in the merged tree; logs [validator] warnings
+    # on failures. NEVER blocks the merge in this PR — behavior change to
+    # fatal-on-invalid is deferred to PR 2 (deploy subcommand).
+    try:
+        _validate_merged_skills_nonfatal(out)
+    except Exception as exc:  # noqa: BLE001 — pre-check must never break merge
+        LOGGER.warning("[validator] pre-check itself errored (%s); skipped", exc)
+
     return result
+
+
+def _validate_merged_skills_nonfatal(out: Path) -> None:
+    """Walk merged tree's skills/<id>/skill.yaml; warn on invalid ones.
+
+    Never raises. Never blocks the merge. PR 1 deliverable per
+    ~/Claude-Logs/code-plans/2026-05-27-sai-overlay-deploy-pr1-schema-validator.md
+    Step 11.
+
+    Writes both LOGGER.warning (for structured logging) AND
+    print(file=sys.stderr) (so the operator running `sai-overlay merge`
+    actually sees the warnings — LOGGER is silent without a configured
+    handler, matching the existing print()-to-stdout pattern in cli()).
+    """
+
+    # Defensive lazy import so a broken validator never breaks the merge.
+    from app.skills.manifest_validator import validate_file  # noqa: PLC0415
+
+    skills_dir = out / "skills"
+    if not skills_dir.is_dir():
+        return
+
+    inspected = 0
+    bad = 0
+    for entry in sorted(skills_dir.iterdir()):
+        if entry.name.startswith(("_", ".")):
+            continue
+        if not entry.is_dir():
+            continue
+        manifest_path = entry / "skill.yaml"
+        if not manifest_path.is_file():
+            continue
+        inspected += 1
+        try:
+            _, report = validate_file(manifest_path, skill_dir=entry)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[validator] {entry.name}: pre-check raised ({exc}); ignoring",
+                file=sys.stderr,
+            )
+            bad += 1
+            continue
+        if not report.ok:
+            bad += 1
+            head = report.errors[0]
+            print(
+                f"[validator] {entry.name}: invalid skill.yaml — "
+                f"{head.rule}: {head.message} "
+                f"(run `python -m app.skills.manifest_validator {manifest_path}` "
+                f"for full report)",
+                file=sys.stderr,
+            )
+
+    if inspected:
+        print(
+            f"[validator] inspected {inspected} skill.yaml file(s); "
+            f"{bad} invalid (non-fatal)",
+            file=sys.stderr,
+        )
 
 
 def _write_manifest(result: MergeResult) -> None:
@@ -454,6 +525,197 @@ def verify(runtime: Path) -> tuple[list[str], list[str], list[str]]:
     return sorted(mismatches), missing, unregistered
 
 
+# ─── deploy (PR 2) — claude_code target ──────────────────────────────
+#
+# See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
+# ~/Claude-Logs/code-plans/2026-05-27-pr1a-schema-fits-reality-plus-pr2-deploy.md.
+#
+# Reads a merged skill's claude_code profile and copies its files to
+# ~/.claude/skills/<id>/ (the Layer-1 user-installed location, which
+# shadows the anthropic-skills plugin install). Approval-gated: --apply
+# requires --approved-by <git-tag> that exists in the SAI repo.
+
+DEPLOY_LOG_FILENAME = ".sai-deploy-log.jsonl"
+
+# Filenames/prefixes never shipped to claude_code (private eval data, #16a).
+_EVAL_FILENAMES = frozenset(
+    {"canaries.jsonl", "edge_cases.jsonl", "workflow_regression.jsonl"}
+)
+
+
+def _is_private_eval_path(relpath: str) -> bool:
+    p = relpath.replace("\\", "/")
+    if p.startswith("eval/") or "/eval/" in p:
+        return True
+    return Path(p).name in _EVAL_FILENAMES
+
+
+@dataclass
+class DeployPlan:
+    skill_id: str
+    version: str
+    target: str
+    target_dir: Path
+    files: list[str]            # relpaths to copy (post-filter)
+    skipped_private: list[str]  # relpaths filtered out
+
+
+def _tag_exists(sai_repo: Path, tag: str) -> bool:
+    import subprocess
+    r = subprocess.run(
+        ["git", "-C", str(sai_repo), "rev-parse", "--verify", f"refs/tags/{tag}"],
+        capture_output=True, text=True,
+    )
+    return r.returncode == 0
+
+
+def _tag_is_signed(sai_repo: Path, tag: str) -> bool:
+    import subprocess
+    r = subprocess.run(
+        ["git", "-C", str(sai_repo), "tag", "-v", tag],
+        capture_output=True, text=True,
+    )
+    # `git tag -v` exits 0 only when a valid signature verifies.
+    return r.returncode == 0
+
+
+def plan_claude_code_deploy(
+    *,
+    skill_id: str,
+    runtime_tree: Path,
+    claude_code_root: Path,
+) -> DeployPlan:
+    """Compute (don't write) the claude_code deploy for one skill.
+
+    Raises InputError on: missing skill dir, invalid manifest, no
+    claude_code profile, target-not-supported.
+    """
+    # Lazy import — avoids a hard dep cycle and keeps merge import-light.
+    from app.skills.manifest_validator import validate_file  # noqa: PLC0415
+
+    skill_dir = runtime_tree / "skills" / skill_id
+    manifest_path = skill_dir / "skill.yaml"
+    if not manifest_path.is_file():
+        raise InputError(f"no skill.yaml at {manifest_path}")
+
+    manifest, report = validate_file(manifest_path, skill_dir=skill_dir)
+    if manifest is None or not report.ok:
+        first = report.errors[0] if report.errors else None
+        detail = f" ({first.rule}: {first.message})" if first else ""
+        raise InputError(f"skill {skill_id!r} manifest invalid{detail}")
+
+    profiles = getattr(manifest, "profiles", None)
+    cc = getattr(profiles, "claude_code", None) if profiles else None
+    if cc is None or not cc.enabled:
+        raise InputError(
+            f"skill {skill_id!r} has no enabled claude_code profile "
+            f"(deploy --target claude_code not supported for it)"
+        )
+    if "claude_code" not in cc.deploy_to:
+        raise InputError(
+            f"skill {skill_id!r} claude_code profile does not list "
+            f"'claude_code' in deploy_to ({cc.deploy_to})"
+        )
+
+    subdir = cc.claude_code_subdir
+    target_dir = (
+        claude_code_root / subdir / skill_id if subdir
+        else claude_code_root / skill_id
+    )
+
+    files: list[str] = []
+    skipped: list[str] = []
+    for rel in cc.files:
+        if _is_private_eval_path(rel):
+            skipped.append(rel)
+        else:
+            files.append(rel)
+
+    return DeployPlan(
+        skill_id=skill_id,
+        version=manifest.identity.version,
+        target="claude_code",
+        target_dir=target_dir,
+        files=files,
+        skipped_private=skipped,
+    )
+
+
+def deploy_claude_code(
+    *,
+    skill_id: str,
+    runtime_tree: Path,
+    claude_code_root: Path,
+    apply: bool,
+    approved_by: Optional[str],
+    sai_repo: Path,
+) -> DeployPlan:
+    """Plan, then (if apply) write the claude_code deploy for one skill.
+
+    Fail-closed (#6, #21): --apply requires an existing approval tag.
+    Atomic writes (temp + rename). Appends a row to the deploy log.
+    """
+    plan = plan_claude_code_deploy(
+        skill_id=skill_id,
+        runtime_tree=runtime_tree,
+        claude_code_root=claude_code_root,
+    )
+
+    if not apply:
+        return plan  # dry-run: caller prints; nothing written.
+
+    # ── Approval gate (#21) ──────────────────────────────────────────────
+    if not approved_by:
+        raise InputError(
+            "deploy --apply requires --approved-by <git-tag> (no surface "
+            "certifies its own deployment, #21)"
+        )
+    if not _tag_exists(sai_repo, approved_by):
+        raise InputError(
+            f"approval tag {approved_by!r} not found in {sai_repo} "
+            f"(create it: git -C {sai_repo} tag -s {approved_by} -m '...')"
+        )
+    if not _tag_is_signed(sai_repo, approved_by):
+        print(
+            f"[deploy] WARNING: approval tag {approved_by!r} is not a verified "
+            f"signed tag; proceeding (signature enforcement deferred)",
+            file=sys.stderr,
+        )
+
+    src_skill_dir = runtime_tree / "skills" / skill_id
+    written: list[dict[str, str]] = []
+    for rel in plan.files:
+        src = src_skill_dir / rel
+        if not src.is_file():
+            raise InputError(f"manifest lists {rel!r} but it's missing at {src}")
+        dst = plan.target_dir / rel
+        if dst.exists():
+            print(f"[deploy] overwriting {dst}", file=sys.stderr)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_suffix(dst.suffix + ".tmp")
+        shutil.copy2(src, tmp, follow_symlinks=True)
+        os.replace(tmp, dst)
+        written.append({"relpath": rel, "sha256": _hash_file(dst)})
+
+    # ── Deploy log (#7 drop-don't-delete; #23 hash record) ───────────────
+    log_path = runtime_tree / DEPLOY_LOG_FILENAME
+    row = {
+        "ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "skill": skill_id,
+        "version": plan.version,
+        "target": "claude_code",
+        "approved_by": approved_by,
+        "target_dir": str(plan.target_dir),
+        "files": written,
+        "skipped_private": plan.skipped_private,
+        "result": "ok",
+    }
+    with log_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+    return plan
+
+
 def cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="sai-overlay",
@@ -474,6 +736,33 @@ def cli(argv: list[str] | None = None) -> int:
 
     p_verify = sub.add_parser("verify", help="re-hash a merged runtime")
     p_verify.add_argument("--runtime", required=True, type=Path)
+
+    p_deploy = sub.add_parser(
+        "deploy", help="deploy a skill's claude_code profile to ~/.claude/skills/"
+    )
+    p_deploy.add_argument("--skill", required=True, help="skill_id (workflow_id)")
+    p_deploy.add_argument(
+        "--target", choices=["claude_code"], default="claude_code",
+        help="deploy target (only claude_code in PR 2)",
+    )
+    p_deploy.add_argument(
+        "--runtime-tree", type=Path,
+        default=Path(os.path.expanduser("~/.sai-runtime")),
+    )
+    p_deploy.add_argument(
+        "--claude-code-root", type=Path,
+        default=Path(os.path.expanduser("~/.claude/skills")),
+        help="root to write claude_code skills into (override for tests)",
+    )
+    p_deploy.add_argument(
+        "--sai-repo", type=Path,
+        default=Path(os.path.expanduser("~/Lutz_Dev/SAI")),
+        help="repo where the approval tag lives",
+    )
+    p_deploy.add_argument("--approved-by", default=None, help="approval git tag")
+    mode = p_deploy.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", default=True)
+    mode.add_argument("--apply", action="store_true", default=False)
 
     args = parser.parse_args(argv)
 
@@ -514,6 +803,30 @@ def cli(argv: list[str] | None = None) -> int:
         for rel in unreg:
             print(f"  unregistered file: {rel}", file=sys.stderr)
         return 1
+
+    if args.cmd == "deploy":
+        apply = bool(args.apply)  # --apply overrides the default --dry-run
+        try:
+            plan = deploy_claude_code(
+                skill_id=args.skill,
+                runtime_tree=args.runtime_tree,
+                claude_code_root=args.claude_code_root,
+                apply=apply,
+                approved_by=args.approved_by,
+                sai_repo=args.sai_repo,
+            )
+        except OverlayError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        verb = "deployed" if apply else "DRY-RUN — would deploy"
+        print(f"{verb} {plan.skill_id} v{plan.version} -> {plan.target_dir}")
+        for rel in plan.files:
+            print(f"  {'wrote' if apply else 'would write'}: {rel}")
+        for rel in plan.skipped_private:
+            print(f"  skipped (private eval): {rel}")
+        if not apply:
+            print("  (dry-run; pass --apply --approved-by <tag> to write)")
+        return 0
 
     return 2
 

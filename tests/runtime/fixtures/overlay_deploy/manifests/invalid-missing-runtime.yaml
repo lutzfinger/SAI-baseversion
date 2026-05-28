@@ -1,0 +1,8 @@
+schema_version: "2"
+
+identity:
+  workflow_id: sample-alpha-bad-1
+  version: "0.1.0"
+  owner: framework-tests
+  description: "Missing 'profiles' key — validator must refuse."
+# (no profiles: key)
