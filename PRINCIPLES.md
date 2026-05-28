@@ -1446,8 +1446,9 @@ When starting a new Claude session for SAI work:
 4. **State the principle being applied** when designing a change. Pin
    it to a numbered rule above so the reasoning is checkable.
 5. **Test before commit.** Tests stay green. Boundary linter stays clean.
-6. **Document deferred work** in the active migration doc, not in
-   this file.
+6. **Document deferred work** as a one-line entry in `LOOSE-ENDS.md` —
+   the canonical index of open items / next steps, which links out to
+   the active migration doc and design docs — not in this file.
 7. **Drop, don't delete** when the framework changes shape.
 
 If a proposed change appears to violate a principle, name the principle,
