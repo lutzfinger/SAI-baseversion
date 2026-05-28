@@ -649,11 +649,15 @@ def deploy_claude_code(
     apply: bool,
     approved_by: Optional[str],
     sai_repo: Path,
+    require_signed: bool = False,
 ) -> DeployPlan:
     """Plan, then (if apply) write the claude_code deploy for one skill.
 
     Fail-closed (#6, #21): --apply requires an existing approval tag.
-    Atomic writes (temp + rename). Appends a row to the deploy log.
+    With ``require_signed=True`` the tag must be a verified GPG-signed tag
+    (full #21 enforcement); default warns-but-proceeds on unsigned so the
+    flow works before GPG is configured. Atomic writes (temp + rename).
+    Appends a row to the deploy log.
     """
     plan = plan_claude_code_deploy(
         skill_id=skill_id,
@@ -676,9 +680,15 @@ def deploy_claude_code(
             f"(create it: git -C {sai_repo} tag -s {approved_by} -m '...')"
         )
     if not _tag_is_signed(sai_repo, approved_by):
+        if require_signed:
+            raise InputError(
+                f"approval tag {approved_by!r} is not a verified signed tag and "
+                f"--require-signed is set. Configure GPG signing (see "
+                f"scripts/setup-skill-signing.sh) and re-tag with `git tag -s`."
+            )
         print(
             f"[deploy] WARNING: approval tag {approved_by!r} is not a verified "
-            f"signed tag; proceeding (signature enforcement deferred)",
+            f"signed tag; proceeding (pass --require-signed to enforce)",
             file=sys.stderr,
         )
 
@@ -760,6 +770,10 @@ def cli(argv: list[str] | None = None) -> int:
         help="repo where the approval tag lives",
     )
     p_deploy.add_argument("--approved-by", default=None, help="approval git tag")
+    p_deploy.add_argument(
+        "--require-signed", action="store_true", default=False,
+        help="refuse unless the approval tag is a verified GPG-signed tag (#21)",
+    )
     mode = p_deploy.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", default=True)
     mode.add_argument("--apply", action="store_true", default=False)
@@ -814,6 +828,7 @@ def cli(argv: list[str] | None = None) -> int:
                 apply=apply,
                 approved_by=args.approved_by,
                 sai_repo=args.sai_repo,
+                require_signed=args.require_signed,
             )
         except OverlayError as e:
             print(f"error: {e}", file=sys.stderr)
