@@ -170,6 +170,25 @@ def test_reapply_is_clean(tmp_path):
     assert len(rows) == 2
 
 
+# ── Test 12 — --require-signed rejects an unsigned tag ───────────────
+
+
+def test_require_signed_rejects_unsigned(tmp_path):
+    rt = tmp_path / "rt"
+    _make_skill(rt)
+    cc_root = tmp_path / "cc"
+    repo = tmp_path / "repo"
+    tag = "sync_skills/demo-skill/v0.1.0"
+    _make_tag_repo(repo, tag)  # lightweight (unsigned) tag
+    with pytest.raises(InputError) as ei:
+        deploy_claude_code(
+            skill_id="demo-skill", runtime_tree=rt, claude_code_root=cc_root,
+            apply=True, approved_by=tag, sai_repo=repo, require_signed=True,
+        )
+    assert "signed" in str(ei.value).lower()
+    assert not cc_root.exists()  # fail-closed, nothing written
+
+
 # ── Test (extra) — unknown skill / no claude_code profile fails ──────
 
 
