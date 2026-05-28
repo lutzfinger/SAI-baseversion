@@ -1,0 +1,3 @@
+{"id": "c1_index_transcripts_triggers", "input": {"user_message": "index the podcast transcripts into the RAG"}, "expected_invokes_skill": "podcast-rag-index", "notes": "Add-transcripts-to-RAG request — must trigger."}
+{"id": "c2_embed_episodes_triggers", "input": {"user_message": "embed these episode transcripts so I can search them"}, "expected_invokes_skill": "podcast-rag-index", "notes": "Embed transcripts for semantic lookup — must trigger."}
+{"id": "c3_unrelated_skips", "input": {"user_message": "what's on my calendar tomorrow"}, "expected_invokes_skill": null, "notes": "No indexing involved — must not trigger."}

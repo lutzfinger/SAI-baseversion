@@ -1,7 +1,7 @@
-schema_version: "1"
+schema_version: "2"
 
 identity:
-  workflow_id: podcast-download
+  skill_id: podcast-download
   version: "0.1.0"
   owner: framework
   description: |
@@ -11,62 +11,80 @@ identity:
     every episode's metadata so downstream skills (local-transcribe,
     podcast-rag-index) can chain off it.
 
-trigger:
-  kind: manual
-  config:
-    invocation: "agent or operator CLI"
+provenance:
+  designer_surface: claude_code
+  designed_at: "2026-05-27T00:00:00Z"
 
-cascade:
-  - tier_id: resolve_feed
-    kind: rules
-    config: {}
-    confidence_threshold: 1.0
-    cost_cap_per_call_usd: 0.0
+profiles:
+  sai_workflow:
+    enabled: true
+    deploy_to: [sai_runtime]
 
-  - tier_id: list_episodes
-    kind: rules
-    config:
-      sort: chronological_desc
-    confidence_threshold: 1.0
-    cost_cap_per_call_usd: 0.0
+    trigger:
+      kind: manual
+      config:
+        invocation: "agent or operator CLI"
 
-  - tier_id: download_each
-    kind: rules
-    config:
-      max_retries: 3
-      resume: true
-    confidence_threshold: 1.0
-    cost_cap_per_call_usd: 0.0
+    cascade:
+      - tier_id: resolve_feed
+        kind: rules
+        config: {}
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
+      - tier_id: list_episodes
+        kind: rules
+        config:
+          sort: chronological_desc
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
+      - tier_id: download_each
+        kind: rules
+        config:
+          max_retries: 3
+          resume: true
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
+      - tier_id: write_manifest
+        kind: rules
+        config: {}
+        confidence_threshold: 1.0
+        cost_cap_per_call_usd: 0.0
 
-  - tier_id: write_manifest
-    kind: rules
-    config: {}
-    confidence_threshold: 1.0
-    cost_cap_per_call_usd: 0.0
+    tools: []
 
-tools: []
+    eval:
+      datasets:
+        - { kind: canaries,   path: canaries.jsonl,            min_count: 1, fail_mode: hard_fail }
+        - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
+        - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
 
-eval:
-  datasets:
-    - { kind: canaries,   path: canaries.jsonl,            min_count: 1, fail_mode: hard_fail }
-    - { kind: edge_cases, path: edge_cases.jsonl,          min_count: 4, fail_mode: soft_fail }
-    - { kind: workflow,   path: workflow_regression.jsonl, min_count: 3, fail_mode: hard_fail }
+    outputs:
+      - name: audio_files
+        side_effect: local_write
+        requires_approval: false
+      - name: manifest
+        side_effect: local_write
+        requires_approval: false
 
-outputs:
-  - name: audio_files
-    side_effect: local_write
-    requires_approval: false
-  - name: manifest
-    side_effect: local_write
-    requires_approval: false
+    policy:
+      approval_required: false
+      cost_cap_per_invocation_usd: 0.0
+      iteration_cap: 1
+      daily_invocation_cap: 50
+      audit_log_path: "~/Library/Logs/SAI/podcast-download.jsonl"
 
-policy:
-  approval_required: false
-  cost_cap_per_invocation_usd: 0.0
-  iteration_cap: 1
-  daily_invocation_cap: 50
-  audit_log_path: "~/Library/Logs/SAI/podcast-download.jsonl"
+    observability:
+      langsmith_project: SAI
+      metrics_emit: true
 
-observability:
-  langsmith_project: SAI
-  metrics_emit: true
+  claude_code:
+    enabled: true
+    files: [SKILL.md]
+    deploy_to: [claude_code]
+    claude_code_subdir: SAI
+    eval:
+      datasets:
+        - kind: canaries
+          path: profiles/claude_code/canaries.jsonl
+          min_count: 1
+          fail_mode: hard_fail
