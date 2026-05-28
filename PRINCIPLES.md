@@ -1145,8 +1145,11 @@ eval:            datasets: a list of EvalDataset specs (#16a). REQUIRED
 feedback:        Slack channel + accepted patterns
                  (defaults to #sai-eval + add_rule/eval_add)
 outputs:         each side-effect (label / reply / draft / send /
-                 post / propose / none) and whether it requires
-                 approval (#9 two-phase commit)
+                 post / propose / external_write / browser_submit /
+                 local_write / file_write / none), whether it
+                 requires_approval (#9 two-phase commit), and whether
+                 it is pre_approved (operator signed off ONCE at skill
+                 sign-off — MUST be paired with a second_opinion tier)
 policy:          approval_required, cost_cap_per_invocation_usd,
                  iteration_cap, daily_invocation_cap, audit_log_path
 observability:   langsmith_project (optional), metrics_emit
@@ -1161,9 +1164,13 @@ observability:   langsmith_project (optional), metrics_emit
    commit path in policy (#9)
 3. `mutate_with_approval` tool without `policy.approval_required:
    true` (#9)
-4. Cascade with no `human` tier when `outputs[].side_effect` includes
-   `send` or `post` and no `requires_approval` (#19 smallest correct
-   scope)
+4. A side-effecting output (`reply` / `send` / `post` / `external_write`
+   / `browser_submit`) that is neither `requires_approval`, behind a
+   `human` tier, nor `pre_approved` + a `second_opinion` tier — OR a
+   `pre_approved` output without a `second_opinion` tier. Pre-approval
+   (signed off once at skill sign-off, mirroring the registry
+   `approval_behavior: preapproved_per_skill_signoff`) always carries a
+   different-LLM safety gate (#19 smallest correct scope)
 5. Eval files exist on disk but row count < `min_count`
 
 **The soft contract** (warnings, not refusal):

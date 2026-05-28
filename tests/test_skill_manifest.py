@@ -244,6 +244,49 @@ class TestHardContract:
         m, report = load_skill_manifest(skill)
         assert report.ok, report.summary()
 
+    def test_external_write_without_any_gate_rejected(self, tmp_path):
+        # A bare requires_approval=false (not pre_approved, no gate) never
+        # ungates an external write.
+        d = _minimal_manifest_dict()
+        d["outputs"] = [
+            {"name": "submit", "side_effect": "external_write", "requires_approval": False},
+        ]
+        skill = _stage_skill(tmp_path, manifest=d)
+        m, report = load_skill_manifest(skill)
+        assert not report.ok
+        assert any("side_effect_needs_gate" in e.rule for e in report.errors)
+
+    def test_pre_approved_without_second_opinion_rejected(self, tmp_path):
+        # operator req 2026-05-28: a pre_approved side effect MUST carry a
+        # different-LLM second_opinion gate.
+        d = _minimal_manifest_dict()
+        d["outputs"] = [
+            {
+                "name": "submit", "side_effect": "external_write",
+                "requires_approval": False, "pre_approved": True,
+            },
+        ]
+        skill = _stage_skill(tmp_path, manifest=d)
+        m, report = load_skill_manifest(skill)
+        assert not report.ok
+        assert any("pre_approved_needs_second_opinion" in e.rule for e in report.errors)
+
+    def test_pre_approved_with_second_opinion_passes(self, tmp_path):
+        d = _minimal_manifest_dict()
+        d["cascade"].append({
+            "tier_id": "safety_gate", "kind": "second_opinion",
+            "confidence_threshold": 0.85,
+        })
+        d["outputs"] = [
+            {
+                "name": "submit", "side_effect": "external_write",
+                "requires_approval": False, "pre_approved": True,
+            },
+        ]
+        skill = _stage_skill(tmp_path, manifest=d)
+        m, report = load_skill_manifest(skill)
+        assert report.ok, report.summary()
+
 
 # ─── soft-contract warnings ───────────────────────────────────────────
 
