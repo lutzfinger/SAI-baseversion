@@ -10,7 +10,9 @@ Hard contract (refused at load time):
   * Missing eval.canaries / eval.edge_cases / eval.workflow_regression
   * Tool with `propose_only` rights but no two-phase commit in policy
   * Tool with `mutate_with_approval` but `policy.approval_required` false
-  * Cascade with side-effects but no `human` tier OR `requires_approval`
+  * Side-effect output that is neither requires_approval, behind a `human`
+    tier, nor pre_approved + a `second_opinion` tier
+  * pre_approved side-effect output without a `second_opinion` safety tier
 
 Soft contract (warnings, not refusal):
 
@@ -266,6 +268,16 @@ class SkillOutput(BaseModel):
     requires_approval: bool = Field(
         default=False,
         description="If true, output goes through two-phase commit (#9).",
+    )
+    pre_approved: bool = Field(
+        default=False,
+        description=(
+            "First-class 'pre-approved per skill sign-off' posture: the operator "
+            "approved this side effect ONCE when approving the skill, so it runs "
+            "without per-run approval. Mirrors the registry approval_behavior "
+            "'preapproved_per_skill_signoff'. The loader REQUIRES a `second_opinion` "
+            "cascade tier whenever this is true (a different-LLM safety gate)."
+        ),
     )
 
 

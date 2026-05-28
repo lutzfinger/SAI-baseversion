@@ -197,22 +197,49 @@ def validate_skill_manifest(
                 ),
             ))
 
-    # ── side-effect outputs need either approval OR a human tier ──────
-    SIDE_EFFECT_OUTPUTS = {"reply", "send", "post"}
+    # ── side-effect outputs need a gate (#2 policy before side effects).
+    # A gated output (reply/send/post/external_write/browser_submit) is OK if:
+    #   - requires_approval=true (per-run two-phase commit), OR
+    #   - a `human` cascade tier exists, OR
+    #   - it is explicitly pre_approved=true AND a `second_opinion` tier exists.
+    # `pre_approved` is the first-class "approved once at skill sign-off"
+    # posture (mirrors registry approval_behavior preapproved_per_skill_signoff).
+    # It MUST be paired with a different-LLM second_opinion safety gate, and it
+    # must be set deliberately — a bare requires_approval=false never ungates a
+    # side effect. external_write + browser_submit are gated so a pre-approved
+    # web-form submit is covered (operator requirement, 2026-05-28).
+    SIDE_EFFECT_OUTPUTS = {
+        "reply", "send", "post", "external_write", "browser_submit",
+    }
     has_human_tier = any(t.kind == "human" for t in manifest.cascade)
+    has_second_opinion = any(t.kind == "second_opinion" for t in manifest.cascade)
     for out in manifest.outputs:
-        if out.side_effect in SIDE_EFFECT_OUTPUTS:
-            if not (out.requires_approval or has_human_tier):
+        if out.side_effect not in SIDE_EFFECT_OUTPUTS:
+            continue
+        if out.requires_approval or has_human_tier:
+            continue  # gated by per-run approval or a human tier
+        if out.pre_approved:
+            if not has_second_opinion:
                 errors.append(ValidationIssue(
                     severity="error",
-                    rule="outputs.side_effect_needs_gate",
+                    rule="outputs.pre_approved_needs_second_opinion",
                     message=(
-                        f"output {out.name!r} has side_effect={out.side_effect} "
-                        "but neither requires_approval=true nor a `human` "
-                        "cascade tier. External mutations must pass through "
-                        "a gate (#2 policy before side effects)."
+                        f"output {out.name!r} is pre_approved=true but the cascade "
+                        "has no `second_opinion` tier. A pre-approved side effect "
+                        "MUST carry a different-LLM 'is this safe and wanted?' gate."
                     ),
                 ))
+            continue
+        errors.append(ValidationIssue(
+            severity="error",
+            rule="outputs.side_effect_needs_gate",
+            message=(
+                f"output {out.name!r} has side_effect={out.side_effect} but no "
+                "gate: set requires_approval=true, add a `human` tier, or mark it "
+                "pre_approved=true WITH a `second_opinion` safety gate "
+                "(#2 policy before side effects)."
+            ),
+        ))
 
     # ── soft contract: cost cap warnings ──────────────────────────────
     if manifest.policy.cost_cap_per_invocation_usd > 1.0:
