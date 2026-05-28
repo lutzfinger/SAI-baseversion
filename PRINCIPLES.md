@@ -1285,67 +1285,110 @@ on its own, then return to the skill.
   `runner.py` — refused. Send back to "build the RAG primitive
   first."
 
-#### 33b. Co-Work designs skills, Claude Code executes them
+#### 33b. Designer surfaces are a closed registered list; every candidate passes a different-model Skill Critique before registration
 
-Skills are designed in **Co-Work** through back-and-forth with the
-operator until they are executable. Co-Work is the DESIGNER.
+Skill design happens **only** on registered designer surfaces. The
+registry lives at `config/designer_surfaces.yaml` (private overlay).
+Surfaces not in the registry cannot emit skill candidates the
+framework will register. The current list:
 
-**Claude Code (the SAI executor) takes the skill as-is and runs
-it.** Claude Code is the EXECUTOR + the canonical-eval holder.
-Claude Code does NOT redesign the skill, restructure its cascade,
-add tiers, remove tiers, or otherwise change the WORKFLOW DESIGN.
+| Surface ID | Identity gate | Trust model |
+|---|---|---|
+| `claude_cowork` | Local Co-Work session, operator-driven | Local process trust (operator at the keyboard) |
+| `claude_code` | Local Claude Code session, operator-driven | Local process trust (operator at the keyboard) |
+| `sai_email_designer` | Email to `sai@…` from operator-allowlisted sender (SPF/DKIM-validated `hello@…`) | Sender allowlist (`config/sender_validation.yaml`) |
+| `sai_slack_designer` | DM to the SAI bot from the operator's slack user_id, validated against `auth.test` at process start | Slack identity gate (#9) |
 
-**What Claude Code DOES do (execution layer):**
+Adding a new surface is a two-phase commit (#9): a registry edit + a
+regression run + a registration ceremony. The default for an unknown
+surface is **refuse** (per #6 fail closed). The default for a NEW
+surface is **empty capabilities** until the operator explicitly adds
+what it may emit.
+
+**Every skill candidate from any surface MUST pass a Skill Critique
+gate before registration.** The Skill Critique:
+
+- Is implemented as an Atomic Step (`skill_critique_reviewer`) and
+  follows the critique-gate contract (`docs/critique_gate_contract.md`)
+- Uses a different vendor + model from whatever produced the
+  candidate (per #21 writer ≠ deployer, extended one level up)
+- Reviews the manifest against the #33 hard contract (required slots,
+  required eval datasets, valid tool references)
+- Reviews the runner code against #33a (no inlined RAG, no new tier
+  kinds, no new Provider classes, no mutate-without-approval paths,
+  no LLM SDKs imported directly in skill code)
+- Returns `passed` / `failed` per the contract; PASS releases the
+  manifest to staging; FAIL withholds it and returns the critique to
+  the designer surface for revision
+
+**Registration is still a separate operator act**, regardless of
+Skill Critique verdict. PASS is necessary but not sufficient. The
+registration flow:
+
+1. Designer surface emits manifest + runner code under
+   `eval/proposed/skills/<id>/` (NOT under `skills/`)
+2. Skill Critique runs automatically on stage; PASS or FAIL recorded
+   in the proposal log
+3. On PASS: operator runs `make validate-skill <id>` (re-runs the
+   Skill Critique + the full canary regression for any datasets
+   declared in the manifest) — only succeeds when both clear
+4. Operator moves the directory into `skills/<id>/`; the framework's
+   hash-verifying loader (#23) picks it up on next reload and writes
+   one `skill_registered` audit row
+
+This is the standard two-phase commit (#9) applied to skill
+registration, with the Skill Critique inserted as a pre-condition
+between stages 1 and 2.
+
+**What Claude Code (the SAI executor) DOES do during execution:**
 - Wires the skill's tier handlers to real LLM Providers
-- Runs the cascade per the manifest
+- Runs the cascade per the manifest as written
 - Holds the canonical EVAL datasets (the data, not the design)
 - Surfaces operator-visible signals (audit log, sai-health, sai-cost)
 - Enforces the framework's eval-first + observation-first +
   security-first guardrails
 
-**What Claude Code does NOT do:**
-- Add new cascade tiers to a Co-Work skill (e.g. inserting a
-  `canonical_lookup` rules tier between `rules` and `cloud_llm`
-  because "deterministic is safer" — that's a DESIGN decision
-  that belongs in Co-Work)
-- Remove cascade tiers from a Co-Work skill
-- Change the LLM-vs-rules tier balance
+**What Claude Code does NOT do during execution:**
+- Add new cascade tiers to a registered Skill
+- Remove cascade tiers from a registered Skill
+- Change the LLM-vs-rules tier balance of a registered Skill
 - Rewrite the skill's runner logic beyond the dependency-injection
   + handler-registration boilerplate the framework requires
 
-**If the operator wants the skill changed**, the change goes back
-to Co-Work. Operator iterates the skill design there until it's
-executable, then hands the new version back to Claude Code. This
-keeps Co-Work as the source of truth for skill design and prevents
-drift from "design in chat → execute in code → re-design in code"
-loops.
+**If the operator wants the skill changed**, the change goes back to
+a designer surface (any of the four). The designer iterates, the
+Skill Critique re-runs, the registration ceremony repeats. Claude
+Code's runtime role is unchanged: take the registered manifest
+as-is, run it.
 
-**The core rules** (eval-first / observation-first / security-first
-+ Co-Work-designs / Claude-Code-executes) reinforce each other:
-- Eval-first → the operator can SEE what the skill does without
-  trusting Claude Code's redesign
-- Observation-first → the audit log shows execution faithfully
-- Security-first → safety guards (sender allowlist, crisis
-  hard-stop, content sanitization) ARE legitimate execution-layer
-  additions because they're framework-universal, not skill-design
-- Co-Work-designs / Claude-Code-executes → Claude Code stays in
-  its lane
+**The 2026-05-04 e1 incident** (the original motivation for this
+principle) is now mechanically prevented by four rules layered:
+- #9 — registration is two-phase committed, so an unsanctioned tier
+  addition can't take effect at runtime without operator approval
+- #21 — the executor surface is structurally separated from the
+  designer surface, regardless of which designer
+- #33 — the manifest contract is the registration gate
+- #33b (this rule) — designer surface is a closed list AND the Skill
+  Critique gate catches a bad manifest *before* it reaches the
+  operator for registration
+
+**Existing pre-#33b skills** (skills already registered before this
+rule shipped) are grandfathered: they remain registered without
+retroactive Skill Critique. On their **next edit**, they go through
+the new registration ceremony and the Skill Critique fires. The
+`LOOSE-ENDS.md` operator file tracks the existing skill list with a
+`pre-33b: true` marker so the grandfathering is auditable.
 
 **Concrete v8 lesson (2026-05-04):** the e1 cornell-delay-triage
 skill from Co-Work originally had `cascade: [rules, cloud_llm,
 human]`. During the "principles audit" cycle Claude Code added a
-`canonical_lookup` rules tier that required deterministic
-course-identifier matching before the LLM could see the email.
-This was a DESIGN change Claude Code shouldn't have made. It
-over-constrained the cascade (real student mail rarely says
-"BANA6070" verbatim) and the operator caught the bug live. The
-fix: remove the added tier, return to Co-Work's original
-design + the framework's universal safety guards.
-
-The line: framework safety guards (input_guards, second-opinion
-gate) are EXECUTION layer because they apply to ALL skills.
-Per-skill cascade design (rules vs LLM tier balance, course
-inference logic) is DESIGN layer and belongs in Co-Work.
+`canonical_lookup` rules tier without going through the registration
+ceremony. This was a DESIGN change made silently at runtime, and the
+operator caught it live. Under this v2 wording the same change would
+either (a) be staged under `eval/proposed/skills/` where the operator
+would see it explicitly before registering, or (b) fail the Skill
+Critique gate for changing the cascade balance without justification.
+The line is now structural, not a stylistic rule.
 
 ---
 
