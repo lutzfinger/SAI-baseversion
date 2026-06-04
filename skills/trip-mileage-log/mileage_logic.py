@@ -141,11 +141,16 @@ def resolve_destinations(
                 break
         if not place or _canon(place) == _canon(home):
             continue
+        # Record EVERY event at a kept destination (deduped), so the reason note
+        # lists all of them (e.g. both "One Medical" AND "esade lutz" for the
+        # Berkeley stop) rather than only the first event per place.
+        label = (ev.get("summary") or ev.get("location") or "").strip()
+        if label and label not in used:
+            used.append(label)
         if _canon(place) in seen:
             continue
         seen.add(_canon(place))
         places.append(place)
-        used.append((ev.get("summary") or ev.get("location") or "").strip())
     low_conf = False
     if not places and utterance_hint:
         h = normalize_place(utterance_hint, aliases) or str(utterance_hint).strip().title()
