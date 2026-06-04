@@ -91,6 +91,17 @@ def test_destinations_two_distinct_in_time_order():
     assert res["places"] == ["Palo Alto", "Berkeley"]
 
 
+def test_destinations_lists_all_events_at_each_place():
+    # The reason note must include BOTH One Medical and esade (regression).
+    res = ml.resolve_destinations([
+        _ev(summary="One Medical - Palo Alto", start="2026-06-03T10:00"),
+        _ev(loc="Berkeley, CA", summary="Lunch", start="2026-06-03T12:00"),
+        _ev(loc="Berkeley, CA", summary="esade lutz", start="2026-06-03T13:00"),
+    ], "Mountain View")
+    assert res["places"] == ["Palo Alto", "Berkeley"]
+    assert res["events_used"] == ["One Medical - Palo Alto", "Lunch", "esade lutz"]
+
+
 def test_destinations_two_equal_collapse():
     res = ml.resolve_destinations(
         [_ev(loc="Berkeley, CA", start="2026-06-03T10:00"),
