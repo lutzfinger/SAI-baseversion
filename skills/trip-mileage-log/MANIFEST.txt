@@ -1,0 +1,24 @@
+trip-mileage-log — file manifest
+
+skill.yaml                 #33 manifest (cascade, eval, outputs, policy)
+runner.py                  cascade tier handlers + run()/run_canary() + CLI (read-only)
+mileage_logic.py           pure deterministic logic (date parse, places, gates, distance, reason)
+trip_config.py             loads the private operator config (fail-closed)
+send_tool.py               THE ONLY sheet write — approved + kill-switched (defaults OFF)
+canaries.jsonl             eval: 3 hard-fail canaries
+edge_cases.jsonl           eval: 10 edge/fail-closed cases
+workflow_regression.jsonl  eval: 3 end-to-end cases
+README.md                  what it does + how to run + how to enable
+SECURITY.md                trust boundaries, gating, fail-closed behavior
+MANIFEST.txt               this file
+
+Private (NOT in this base skill — operator overlay):
+  ~/Lutz_Dev/SAI/config/trip_mileage.yaml   home, sheet URL, tab gids, kill-switch, aliases
+
+Framework (additive, separate file):
+  app/connectors/calendar.py  + CalendarHistoryConnector.list_events_on_date()
+
+Tests (offline):
+  tests/test_trip_mileage_log.py
+  tests/test_calendar_events_on_date.py
+  tests/fixtures/trip_mileage/{config_ok,config_missing}.yaml

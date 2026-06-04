@@ -64,6 +64,83 @@ class CalendarHistoryConnector:
             },
         )
 
+    def list_events_on_date(
+        self,
+        date_str: str,
+        *,
+        tz_offset: str = "-07:00",
+        calendar_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return one local day's events as simple dicts (read-only).
+
+        Additive helper (no change to the contact-summary path). ``date_str`` is
+        ``YYYY-MM-DD``; ``tz_offset`` anchors the local-day window. Each item is
+        ``{summary, location, description, start, end, all_day}``. Skills call
+        THIS instead of touching the Google SDK (connector isolation).
+        """
+        service = self._service or self.authenticator.build_service()
+        y, m, d = (int(x) for x in date_str.split("-"))
+        nxt = (datetime(y, m, d) + timedelta(days=1)).date().isoformat()
+        time_min = f"{date_str}T00:00:00{tz_offset}"
+        time_max = f"{nxt}T00:00:00{tz_offset}"
+        ids = calendar_ids or self._calendar_ids(service)
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for cal_id in ids:
+            for item in self._iter_events_window(
+                service, calendar_id=cal_id, time_min=time_min, time_max=time_max,
+            ):
+                key = _event_dedupe_key(item)
+                if key in seen:
+                    continue
+                seen.add(key)
+                start = cast_to_mapping(item.get("start"))
+                end = cast_to_mapping(item.get("end"))
+                out.append({
+                    "summary": str(item.get("summary", "") or ""),
+                    "location": str(item.get("location", "") or ""),
+                    "description": str(item.get("description", "") or ""),
+                    "start": str(start.get("dateTime") or start.get("date") or ""),
+                    "end": str(end.get("dateTime") or end.get("date") or ""),
+                    "all_day": ("date" in start and "dateTime" not in start),
+                })
+        out.sort(key=lambda e: e["start"])
+        return out
+
+    def _iter_events_window(
+        self,
+        service: Any,
+        *,
+        calendar_id: str,
+        time_min: str,
+        time_max: str,
+    ) -> list[dict[str, Any]]:
+        """Like _iter_events but bounded by an explicit [time_min, time_max)."""
+        items: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            kwargs: dict[str, Any] = {
+                "calendarId": calendar_id,
+                "timeMin": time_min,
+                "timeMax": time_max,
+                "singleEvents": True,
+                "orderBy": "startTime",
+                "maxResults": self.max_results,
+            }
+            if page_token:
+                kwargs["pageToken"] = page_token
+            response = cast_to_mapping(service.events().list(**kwargs).execute())
+            raw_items = response.get("items", [])
+            if isinstance(raw_items, list):
+                for item in raw_items:
+                    if isinstance(item, dict):
+                        items.append(item)
+            raw_page_token = response.get("nextPageToken")
+            if not isinstance(raw_page_token, str) or not raw_page_token.strip():
+                break
+            page_token = raw_page_token
+        return items
+
     def summarize_contact(
         self,
         *,
