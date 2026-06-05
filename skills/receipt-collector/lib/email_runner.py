@@ -413,18 +413,10 @@ def _poll_new_triggers(
             continue
 
         if dispatch.verdict is dispatch_agent.Verdict.GENERAL_QUERY:
-            print(f"  → general_assistant (Claude + web_search)")
-            try:
-                answer = general_assistant.respond_to_query(
-                    text=f"Subject: {subject}\n\n{body}",
-                    overlay=overlay,
-                )
-            except Exception as e:
-                answer = (
-                    f"I couldn't generate a reply (internal error: {e}). "
-                    f"Try rephrasing or come back in a few minutes."
-                )
-            send_reply(overlay, msg, email_format.general_assistant_reply(answer))
+            # Yielded to the SAI dispatcher's general_query tool (LLM + web_search,
+            # app/tools/operator_qa) — one responder per command. The daemon no longer
+            # answers operator questions; the dispatcher owns them. (2026-06-05 fold-in.)
+            print("  → general_query yielded to SAI dispatcher (operator_qa tool)")
             seen_message_ids.add(msg_id)
             continue
 
