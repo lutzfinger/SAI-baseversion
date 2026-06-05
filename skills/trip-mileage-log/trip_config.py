@@ -47,4 +47,16 @@ def load_trip_config(path: str | Path | None = None) -> dict[str, Any]:
     raw.setdefault("seed_distances", {})
     if not isinstance(raw["place_aliases"], dict):
         raise ValueError(f"{cfg_path}: place_aliases must be a mapping")
+    # Phase 2/3 optional blocks (defaults applied so the base skill stays values-free).
+    raw.setdefault("distance", {})
+    dist = raw["distance"]
+    dist.setdefault("provider", "osrm_nominatim")
+    dist.setdefault("region_suffix", ", CA, USA")
+    dist.setdefault("geocode_min_interval_s", 1.1)
+    raw.setdefault("max_local_miles", 300)         # deterministic plausibility bound
+    raw.setdefault("max_writes_per_day", 5)        # daemon per-day write cap
+    # Headless-daemon addresses (only needed when running as the email daemon).
+    raw.setdefault("operator_addresses", [])       # who may trigger (fail-closed allowlist)
+    raw.setdefault("reply_to", "")                 # daemon replies only here
+    raw.setdefault("sai_from", "")                 # From: header for the reply
     return raw

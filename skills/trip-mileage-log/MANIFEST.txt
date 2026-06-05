@@ -1,24 +1,25 @@
-trip-mileage-log — file manifest
+trip-mileage-log v0.3.0 — file manifest (headless autonomous email daemon)
 
-skill.yaml                 #33 manifest (cascade, eval, outputs, policy)
-runner.py                  cascade tier handlers + run()/run_canary() + CLI (read-only)
-mileage_logic.py           pure deterministic logic (date parse, places, gates, distance, reason)
-trip_config.py             loads the private operator config (fail-closed)
-send_tool.py               THE ONLY sheet write — approved + kill-switched (defaults OFF)
-canaries.jsonl             eval: 3 hard-fail canaries
-edge_cases.jsonl           eval: 10 edge/fail-closed cases
+skill.yaml                 #33 manifest (email trigger, safety_gate second_opinion + write tiers, pre_approved outputs)
+runner.py                  deterministic tiers + build_trip_plan + run_autonomous + hermetic run_canary + CLI
+mileage_logic.py           pure logic (date parse, places, gates, distance math, reason)
+trip_config.py             loads the private operator config (fail-closed; distance + daemon blocks)
+safety.py                  different-model safety gate (cascade.predict role safety_gate_high; fail-closed)
+intake.py                  email intake — operator-sender validation (fail-closed) + utterance extract
+run_daemon.py              headless run_once poll cycle (idempotency, per-day cap, needs-human reply) + main() wiring
+send_tool.py               THE ONLY sheet write — kill-switched (defaults OFF), re-validates, send_enabled override
+canaries.jsonl             eval: 3 hard-fail canaries (autonomous outcomes)
+edge_cases.jsonl           eval: 12 edge/fail-closed cases (flight, relocation, too-many, unresolved, implausible, unsafe, overwrite, prospective)
 workflow_regression.jsonl  eval: 3 end-to-end cases
-README.md                  what it does + how to run + how to enable
-SECURITY.md                trust boundaries, gating, fail-closed behavior
+README.md / SECURITY.md    behavior + the security envelope
 MANIFEST.txt               this file
 
-Private (NOT in this base skill — operator overlay):
-  ~/Lutz_Dev/SAI/config/trip_mileage.yaml   home, sheet URL, tab gids, kill-switch, aliases
+Composed framework primitive (its OWN ship — §33a, NOT skill code):
+  app/connectors/distance.py     keyless OSRM route + Nominatim geocode (branch: distance-connector)
+  app/connectors/calendar.py     + list_events_on_date (additive, Phase 1)
 
-Framework (additive, separate file):
-  app/connectors/calendar.py  + CalendarHistoryConnector.list_events_on_date()
+Private (operator overlay — NOT in this base skill):
+  ~/Lutz_Dev/SAI/config/trip_mileage.yaml          home, sheet, gids, distance, kill-switch, operator addresses
+  ~/Lutz_Dev/SAI/app/control_plane/scheduled_jobs.py   ScheduledJobSpec (wants_watchdog) — operator install
 
-Tests (offline):
-  tests/test_trip_mileage_log.py
-  tests/test_calendar_events_on_date.py
-  tests/fixtures/trip_mileage/{config_ok,config_missing}.yaml
+Tests (offline): tests/test_trip_mileage_log.py, tests/test_distance_connector.py, tests/test_calendar_events_on_date.py

@@ -1,39 +1,56 @@
-# trip-mileage-log — security & trust boundaries
+# trip-mileage-log — security & trust boundaries (v0.3.0, autonomous daemon)
 
-## Side effects
-- **Only** `send_tool.py` mutates the Google Sheet (writes H/I/J on the date
-  row; appends new round-trip distances to the `Distance MTV to` tab).
-- The runner/cascade is **read-only**: it reads Calendar + the Sheet and stages
-  a YAML proposal. It never writes to the Sheet.
+This is a **headless autonomous** skill that writes to a **tax** sheet from an
+**email** trigger with **no per-run human approval**. The safety envelope is the
+whole point — every layer below is load-bearing.
 
-## Gating (PRINCIPLES §2, §9, §16e)
-- The sheet write is declared `external_write` + `requires_approval: true`, and
-  the cascade ends in a `human` tier that stages a proposal for operator ✅.
-- `send_tool.py` sits behind a kill-switch env var
-  (`SAI_TRIP_MILEAGE_SEND_ENABLED`) that **defaults OFF**. With it off, the tool
-  is a no-op that reports what it *would* have written.
+## Who may trigger (fail-closed)
+- A trigger thread is acted on ONLY when the request email is from an
+  **allowlisted operator address** (`config.operator_addresses`); any other
+  sender is ignored (fired once, no reply, no action).
+- The daemon replies ONLY to `config.reply_to` (the operator), From `config.sai_from`.
 
-## Fail-closed behavior (PRINCIPLES §6)
-The skill refuses (escalates / asks; never guesses) on:
-- unparseable date, or no matching date row in the sheet;
-- a **flight day** (airport in cols C/D, or a flight calendar event) — this
-  column is local *driving* miles only;
-- a **relocation** (morning location ≠ evening location → not a clean home
-  round trip);
-- more than two destinations in a day;
-- an **unknown distance** or **inter-stop leg** → asks the operator, then stores
-  the answer for reuse;
-- an **already-filled** H/I/J row → refuses to overwrite unless the operator
-  confirms (`confirm_overwrite`), re-checked again in `send_tool.py`.
+## Pre-approved + mandatory safety gate (PRINCIPLES §7a / §33 item 4)
+- The sheet write is `pre_approved: true` (the operator's one-time sign-off), so
+  there is no per-run click. The manifest therefore carries a `second_opinion`
+  tier (`safety_gate_high`), and the runtime runs that **different-model** gate
+  before every write — fail-closed on anything but a clear "safe" verdict (#6).
+  (The producer is deterministic, so an Anthropic reviewer is still a distinct
+  surface — writer ≠ reviewer, §21.)
 
-## Re-validation in the write path (defense in depth)
-`apply_approved_proposal` re-checks the proposal before writing: correct
-`workflow_id`, a real row ≥ 2, `miles > 0`, `0 ≤ business ≤ 100`, a non-empty
-reason, and refuses an unconfirmed overwrite of populated cells.
+## Deterministic guards (do NOT depend on the LLM)
+Fail-closed (no write; a "needs human" reply) on:
+- non-operator sender · unparseable date · no matching date row;
+- a **flight day** (airport in C/D, or a flight calendar event) — column G is a
+  generic travel flag and is intentionally NOT used as a flight signal;
+- a **relocation** (morning ≠ evening location);
+- more than two destinations;
+- an **unresolvable** distance (geocode/route failure or no connector) — it never
+  asks or guesses;
+- an **implausible** loop (> `max_local_miles`, default 300 — a flight, not a drive);
+- an already-filled H/I/J row without confirmed overwrite.
 
-## Data & scopes
-- Reads: Google Calendar (day events), the mileage Google Sheet. Writes: the
-  same sheet (H/I/J + distance tab), only via `send_tool.py`.
-- Operator-specific values (home, sheet URL, gids) live in the **private**
-  overlay config, never in this base skill (§17/§18).
-- No LLM is used; nothing is sent to a model provider.
+## The write path
+- Only `send_tool.apply_approved_proposal` mutates the sheet (H/I/J + appends new
+  round-trips to the `Distance MTV to` tab). It sits behind the kill-switch
+  `SAI_TRIP_MILEAGE_SEND_ENABLED` (defaults **OFF**, §16e), re-validates
+  fail-closed (workflow_id, row, miles>0, business 0..100), and re-checks
+  overwrite. The `send_enabled` param is a test-only override of the env.
+
+## Idempotency / caps
+- `SAI/trip_mileage_attempted` before the write + `SAI/trip_mileage_processed`
+  after → fires once. Per-day write cap (`max_writes_per_day`). A fail-closed
+  path still marks processed (no re-loop). **Known window:** a crash between the
+  attempted and processed markers could re-run on the next poll; the overwrite
+  guard limits the blast radius (an identical re-write).
+
+## Distance source
+- Keyless OSRM (route) + Nominatim (geocode) via the `distance` framework
+  connector; fail-closed on HTTP/timeout/429/parse; results cached to the sheet
+  (each place hits the network once). **Partial-write note:** if the row writes
+  but the distance-tab append fails, the tab is simply un-cached and re-resolves
+  next time (harmless).
+
+## LLM / models
+- The only LLM is the safety gate, addressed by **role** `safety_gate_high`
+  (never a model id, §24b). No vendor SDK is imported in skill code.

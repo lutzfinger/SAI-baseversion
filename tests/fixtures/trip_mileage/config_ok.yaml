@@ -7,3 +7,12 @@ kill_switch_env: "SAI_TRIP_MILEAGE_SEND_ENABLED"
 place_aliases:
   "sutardja": "Berkeley"
 seed_distances: {}
+distance:
+  provider: osrm_nominatim
+  region_suffix: ", CA, USA"
+max_local_miles: 300
+max_writes_per_day: 5
+operator_addresses:
+  - "hello@example.com"
+reply_to: "hello@example.com"
+sai_from: "sai@example.com"

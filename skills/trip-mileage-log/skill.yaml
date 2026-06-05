@@ -2,78 +2,83 @@ schema_version: "1"
 
 identity:
   workflow_id: trip-mileage-log
-  version: "0.1.0"
+  version: "0.3.0"
   owner: framework
   description: |
-    Deterministic SAI workflow. From "yesterday I went to Berkeley" / "I am
-    going to Berkeley" it finds the date row in the operator's mileage Google
-    Sheet, reads that day's Google Calendar to determine where they drove (one
-    place, or a two-stop chained loop home->A->B->home), confirms it was a DRIVE
-    not a flight (no airport booking and no flight calendar event), looks up
-    round-trip miles from the workbook's "Distance MTV to" tab, and STAGES an
-    approval proposal to write column H (miles), I (100% business) and J
-    (reason). The real sheet write happens only in send_tool.py after operator
-    approval, behind a kill-switch that defaults OFF. Values-free: home, sheet
-    URL, tab gids and the kill-switch name come from the private config
-    config/trip_mileage.yaml (PRINCIPLES §17/§18). Fail-closed on: unparseable
-    date, no date row, ambiguous/missing destination, flight day, B!=F
-    relocation, an unknown distance or inter-stop leg (asks the operator), and
-    an already-filled row (unless overwrite is confirmed).
+    Headless email daemon. When the operator emails sai@ (or a thread is tagged
+    SAI/trip_mileage) "yesterday I went to Berkeley", the launchd poller validates
+    the sender is the operator, reads that day's Google Calendar for the
+    destination(s) (a two-stop day is one chained loop home->A->B->home), confirms
+    it was a DRIVE not a flight, AUTO-RESOLVES the driving distance via the
+    `distance` framework connector (keyless OSRM+Nominatim, cached into the
+    "Distance MTV to" tab), applies a deterministic plausibility bound, passes a
+    DIFFERENT-MODEL safety gate (safety_gate_high), and writes column H (miles),
+    I (100% business), J (reason) — then replies on the thread. No per-run human
+    sign-off (pre-approved); the safety gate + kill-switch are the runtime guard.
+    Values-free: home, sheet URL, gids, distance source, operator/reply addresses
+    come from the private config (§17/§18). Fail-closed (no write, "needs human"
+    reply) on: non-operator sender, unparseable date, no date row, ambiguous/
+    missing or >2 destinations, flight day, B!=F relocation, an unresolvable
+    distance, an implausible (>max_local_miles) loop, a non-safe safety verdict,
+    or an already-filled row without confirmed overwrite.
 
 trigger:
-  kind: claude_tool
+  kind: email_pattern
   config:
-    invocation: "python skills/trip-mileage-log/runner.py --utterance '...' --today YYYY-MM-DD"
+    query: 'label:"SAI/trip_mileage" -label:"SAI/trip_mileage_processed"'
 
 cascade:
   - tier_id: validate_inputs
     kind: rules
-    config:
-      requires: ["utterance|explicit_date", "config"]
+    config: {requires: ["operator_sender", "utterance"]}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
   - tier_id: read_context
     kind: rules
-    config:
-      reads: ["google_calendar:day_events", "google_sheet:time_tracking_row", "google_sheet:distance_tab"]
-      home: "from config.home_label"
+    config: {reads: ["google_calendar:day_events", "google_sheet:time_tracking_row", "google_sheet:distance_tab"]}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
   - tier_id: not_flying_gate
     kind: rules
-    config:
-      flight_signals: ["airport_cols_C_D", "flight_calendar_event"]
-      note: "column G (Travel Day) is NOT used — it is TRUE on local drive days too"
-      also_blocks: "B!=F relocation (not a clean home round trip)"
+    config: {flight_signals: ["airport_cols_C_D", "flight_calendar_event"], also_blocks: "B!=F relocation"}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
   - tier_id: resolve_distance
     kind: rules
     config:
-      destinations: "google calendar day events -> normalized places"
-      miles: "single = round trip; two = rt(A)/2 + leg(A,B) + rt(B)/2 (one-way ~= round-trip/2)"
-      on_miss: "fail closed and ask the operator for the round-trip / leg miles"
+      source: "distance connector (keyless OSRM route + Nominatim geocode), cached to the Distance MTV to tab"
+      plausibility: "fail closed if the loop exceeds max_local_miles (a flight)"
+      on_unresolved: "fail closed (NEVER ask the operator)"
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
   - tier_id: overwrite_gate
     kind: rules
-    config:
-      refuse_if: "H/I/J already populated and confirm_overwrite not set"
+    config: {refuse_if: "H/I/J already populated and confirm_overwrite not set"}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
   - tier_id: build_draft
     kind: rules
-    config:
-      writes_preview: ["H=miles", "I=100", "J=reason"]
+    config: {writes_preview: ["H=miles", "I=100", "J=reason"]}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
-  # PRINCIPLES §2/§9: the external sheet mutation stages a proposal for the
-  # operator. send_tool.py performs the actual write after approval, behind a
-  # kill switch that defaults OFF.
-  - tier_id: human
-    kind: human
+  # Mandatory different-model safety gate (§7a/§33 item 4) — the write below is
+  # pre_approved (no per-run human), so a DIFFERENT model than the deterministic
+  # producer reviews "is this safe & wanted?" and the run fails closed on a
+  # non-safe verdict (#6). Role only, never a model id (§24b).
+  - tier_id: safety_gate
+    kind: second_opinion
     config:
-      channel: sai-eval
+      llm_role: safety_gate_high
+      review_targets: [mileage_row_write]
+      question: >-
+        Is this autonomous business-mileage write safe and wanted? Confirm it is
+        a believable local drive (not a flight), the miles are plausible for the
+        route, the destinations match the calendar reason, and business is 100%.
+    confidence_threshold: 0.85
+    cost_cap_per_call_usd: 0.05
+  - tier_id: write_row
+    kind: rules
+    config: {writes: ["H", "I", "J"], appends: "new distances to the Distance MTV to tab", kill_switch: "SAI_TRIP_MILEAGE_SEND_ENABLED"}
     confidence_threshold: 1.0
     cost_cap_per_call_usd: 0.0
 
@@ -99,24 +104,27 @@ eval:
 
 feedback:
   channel: sai-eval
-  patterns:
-    - add_rule
-    - eval_add
+  patterns: [add_rule, eval_add]
 
 outputs:
+  # All pre-approved per the operator sign-off; each is gated by the safety_gate
+  # (second_opinion) tier above (§33 hard-contract item 4).
   - name: mileage_row_write
-    side_effect: external_write     # writes H/I/J on the date row
-    requires_approval: true         # §2/§9 external mutation gates by default
-  - name: distance_tab_append
-    side_effect: external_write     # remembers a newly-supplied distance
-    requires_approval: true
-  - name: proposal_staged
-    side_effect: none               # local YAML proposal for operator review
+    side_effect: external_write
     requires_approval: false
+    pre_approved: true
+  - name: distance_tab_append
+    side_effect: external_write
+    requires_approval: false
+    pre_approved: true
+  - name: thread_reply
+    side_effect: reply
+    requires_approval: false
+    pre_approved: true
 
 policy:
-  approval_required: true
-  cost_cap_per_invocation_usd: 0.0
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.10
   iteration_cap: 1
   daily_invocation_cap: 50
   audit_log_path: "~/Library/Logs/SAI/trip-mileage-log.jsonl"

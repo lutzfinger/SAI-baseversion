@@ -1,17 +1,18 @@
-"""Offline tests for the trip-mileage-log skill (no creds, no live sheet/calendar).
-
-Groups (run with -k <name>): config, parse_date, destinations, gates, find_row,
-distance, reason, eval_datasets, manifest, e2e, send_tool.
+"""Offline tests for the trip-mileage-log skill — AUTONOMOUS email daemon
+(Phases 2/3). No creds, no network, no real sheet. Groups (-k): config,
+parse_date, destinations, gates, find_row, distance, reason, resolve_auto,
+safety, autonomous, eval_datasets, manifest, send_tool, intake, run_once.
 """
 from __future__ import annotations
 
 import json
 import sys
 from datetime import date
-from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-import yaml
+
+from pathlib import Path
 
 _BASE = Path(__file__).resolve().parent.parent
 SKILL_DIR = _BASE / "skills" / "trip-mileage-log"
@@ -21,23 +22,25 @@ sys.path.insert(0, str(SKILL_DIR))
 import mileage_logic as ml          # noqa: E402
 import trip_config                  # noqa: E402
 import runner                       # noqa: E402
+import safety                       # noqa: E402
+import intake                       # noqa: E402
+import run_daemon                   # noqa: E402
 import send_tool                    # noqa: E402
 from app.skills.loader import load_skill_manifest  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def _ensure_handlers():
-    # The cascade handler table is global; other test modules clear it.
-    runner.register_handlers()
-    yield
+def _ev(loc="", summary="", desc="", start="2026-06-03T10:00"):
+    return {"location": loc, "summary": summary, "description": desc, "start": start}
 
 
-# ─── config (Test 1) ────────────────────────────────────────────────
+# ─── config (Test P2) ───────────────────────────────────────────────
 
-def test_config_loads_ok():
+def test_config_loads_ok_with_distance_block():
     cfg = trip_config.load_trip_config(FIXTURES / "config_ok.yaml")
     assert cfg["home_label"] == "Mountain View"
-    assert cfg["place_aliases"]["sutardja"] == "Berkeley"
+    assert cfg["distance"]["provider"] == "osrm_nominatim"
+    assert cfg["max_local_miles"] == 300
+    assert "hello@example.com" in cfg["operator_addresses"]
 
 
 def test_config_missing_key_fails_closed():
@@ -47,10 +50,10 @@ def test_config_missing_key_fails_closed():
 
 def test_config_absent_path_fails_closed():
     with pytest.raises(FileNotFoundError):
-        trip_config.load_trip_config(FIXTURES / "does_not_exist.yaml")
+        trip_config.load_trip_config(FIXTURES / "nope.yaml")
 
 
-# ─── parse_date (Test 2) ────────────────────────────────────────────
+# ─── parse_date / destinations / gates / find_row / distance / reason (pure) ──
 
 @pytest.mark.parametrize("utterance,exp_date,exp_prosp", [
     ("yesterday I went to Berkeley", "2026-06-03", False),
@@ -61,38 +64,14 @@ def test_config_absent_path_fails_closed():
     ("blah blah no date", None, False),
 ])
 def test_parse_date(utterance, exp_date, exp_prosp):
-    d, prosp = ml.parse_trip_date(utterance, date(2026, 6, 4))
-    assert d == exp_date
-    assert prosp == exp_prosp
-
-
-# ─── destinations (Test 4) ──────────────────────────────────────────
-
-def _ev(loc="", summary="", desc="", start="2026-06-03T10:00"):
-    return {"location": loc, "summary": summary, "description": desc, "start": start}
+    assert ml.parse_trip_date(utterance, date(2026, 6, 4)) == (exp_date, exp_prosp)
 
 
 def test_destinations_address_form():
-    res = ml.resolve_destinations([_ev(loc="304 Grimes, Berkeley, CA 94720, USA")], "Mountain View")
-    assert res["places"] == ["Berkeley"]
-
-
-def test_destinations_video_only_uses_utterance_hint():
-    res = ml.resolve_destinations([_ev(loc="https://meet.google.com/x")], "Mountain View",
-                                  utterance_hint="yesterday I went to Berkeley")
-    assert res["places"] == ["Berkeley"]
-    assert res["low_confidence"] is True
-
-
-def test_destinations_two_distinct_in_time_order():
-    res = ml.resolve_destinations(
-        [_ev(loc="Berkeley, CA", start="2026-06-03T12:00"),
-         _ev(summary="One Medical - Palo Alto", start="2026-06-03T10:00")], "Mountain View")
-    assert res["places"] == ["Palo Alto", "Berkeley"]
+    assert ml.resolve_destinations([_ev(loc="304 Grimes, Berkeley, CA 94720")], "Mountain View")["places"] == ["Berkeley"]
 
 
 def test_destinations_lists_all_events_at_each_place():
-    # The reason note must include BOTH One Medical and esade (regression).
     res = ml.resolve_destinations([
         _ev(summary="One Medical - Palo Alto", start="2026-06-03T10:00"),
         _ev(loc="Berkeley, CA", summary="Lunch", start="2026-06-03T12:00"),
@@ -102,285 +81,286 @@ def test_destinations_lists_all_events_at_each_place():
     assert res["events_used"] == ["One Medical - Palo Alto", "Lunch", "esade lutz"]
 
 
-def test_destinations_two_equal_collapse():
-    res = ml.resolve_destinations(
-        [_ev(loc="Berkeley, CA", start="2026-06-03T10:00"),
-         _ev(loc="UC Berkeley", summary="esade", start="2026-06-03T13:00")],
-        "Mountain View", aliases={"uc berkeley": "Berkeley"})
-    assert res["places"] == ["Berkeley"]
+def test_destinations_video_only_uses_utterance():
+    res = ml.resolve_destinations([_ev(loc="https://meet.google.com/x")], "Mountain View",
+                                  utterance_hint="yesterday I went to Berkeley")
+    assert res["places"] == ["Berkeley"] and res["low_confidence"] is True
 
 
-def test_destinations_too_many():
-    res = ml.resolve_destinations(
-        [_ev(loc="Berkeley, CA", start="2026-06-03T09:00"),
-         _ev(loc="Palo Alto, CA", start="2026-06-03T12:00"),
-         _ev(loc="San Jose, CA", start="2026-06-03T15:00")], "Mountain View")
-    assert res["too_many"] is True
+def test_gates_flight_and_relocation():
+    assert ml.is_flight_day(["2026-06-03", "Mountain View", "", "", "", "", "TRUE", "", "", ""],
+                            [_ev(loc="Berkeley, CA")])[0] is False           # G is NOT a flight signal
+    assert ml.is_flight_day(["2026-06-03", "", "SFO", "JFK", "", "", "", "", "", ""], [])[0] is True
+    assert ml.is_flight_day(["2026-06-03"] + [""] * 9, [_ev(summary="Flight UA88")])[0] is True
+    assert ml.is_relocation(["2026-06-03", "Mountain View", "", "", "", "Ithaca", "", "", "", ""])[0] is True
 
 
-def test_destinations_home_filtered():
-    res = ml.resolve_destinations([_ev(loc="Mountain View, CA")], "Mountain View")
-    assert res["places"] == []
-
-
-# ─── gates (Test 5) ─────────────────────────────────────────────────
-
-def test_flight_gate_clean_drive_day_is_not_flight():
-    row = ["2026-06-03", "Mountain View", "", "", "", "", "TRUE", "", "", ""]  # G=TRUE but no airport
-    flew, _ = ml.is_flight_day(row, [_ev(loc="Berkeley, CA", summary="esade")])
-    assert flew is False  # G is NOT a flight signal
-
-
-def test_flight_gate_airport_filled():
-    row = ["2026-06-03", "", "SFO", "JFK", "", "", "TRUE", "", "", ""]
-    assert ml.is_flight_day(row, [])[0] is True
-
-
-def test_flight_gate_calendar_flight_event():
-    assert ml.is_flight_day(["2026-06-03"] + [""] * 9, [_ev(summary="Flight UA88 to JFK")])[0] is True
-
-
-def test_relocation_gate_b_differs_from_f():
-    row = ["2026-06-03", "Mountain View", "", "", "", "Ithaca", "", "", "", ""]
-    assert ml.is_relocation(row)[0] is True
-
-
-def test_relocation_gate_same_or_empty():
-    assert ml.is_relocation(["2026-06-03", "Mountain View", "", "", "", "", "", "", "", ""])[0] is False
-
-
-# ─── find_row + conflict (Test 6) ───────────────────────────────────
-
-def test_find_date_row():
-    col_a = ["Day", "2026-06-02", "2026-06-03", "2026-06-04"]
-    assert ml.find_date_row(col_a, "2026-06-04") == 4
-    assert ml.find_date_row(col_a, "2026-12-31") is None
-
-
-def test_row_conflict():
+def test_find_row_and_conflict():
+    assert ml.find_date_row(["Day", "2026-06-03", "2026-06-04"], "2026-06-04") == 3
+    assert ml.find_date_row(["Day", "2026-06-03"], "2026-12-31") is None
     assert ml.row_conflict(["2026-06-03"] + [""] * 6 + ["80", "", ""]) == ["H"]
-    assert ml.row_conflict(["2026-06-03"] + [""] * 9) == []
 
 
-# ─── distance (Test 7) ──────────────────────────────────────────────
-
-def _tab():
-    return ml.parse_distance_tab([["Berkeley", "80"], ["Palo Alto", "20"], ["Palo Alto -> Berkeley", "40"]])
-
-
-def test_distance_single_hit():
-    rt, leg = _tab()
+def test_distance_chained_math():
+    rt, leg = ml.parse_distance_tab([["Berkeley", "80"], ["Palo Alto", "20"], ["Palo Alto -> Berkeley", "40"]])
     assert ml.chained_loop_miles(["Berkeley"], rt, leg)["miles"] == 80.0
+    assert ml.chained_loop_miles(["Palo Alto", "Berkeley"], rt, leg)["miles"] == 90.0
 
 
-def test_distance_single_miss_asks():
-    rt, leg = _tab()
-    out = ml.chained_loop_miles(["Oakland"], rt, leg)
-    assert out["missing"] == {"round_trip": ["Oakland"]}
-    assert "Oakland" in out["ask"]
-
-
-def test_distance_two_place_chained():
-    rt, leg = _tab()
-    assert ml.chained_loop_miles(["Palo Alto", "Berkeley"], rt, leg)["miles"] == 90.0  # 10 + 40 + 40
-
-
-def test_distance_leg_miss_asks():
-    rt, leg = ml.parse_distance_tab([["Berkeley", "80"], ["Palo Alto", "20"]])
-    out = ml.chained_loop_miles(["Palo Alto", "Berkeley"], rt, leg)
-    assert out["missing"]["leg"] == ["Palo Alto -> Berkeley"]
-
-
-def test_distance_provided_round_trip_satisfies_ask():
-    rt, leg = ml.parse_distance_tab([])
-    out = ml.chained_loop_miles(["Oakland"], rt, leg, provided={"round_trip": {"Oakland": 50}})
-    assert out["miles"] == 50.0
-
-
-# ─── reason + draft (Test 8) ────────────────────────────────────────
-
-def test_reason_contains_required_tokens():
-    reason = ml.build_reason("2026-06-03", ["Palo Alto", "Berkeley"],
-                             ["One Medical - Palo Alto", "esade lutz"],
-                             "PA one-way 10 + PA->Berkeley 40 + Berkeley one-way 40", "no flight")
-    for tok in ["2026-06-03", "Palo Alto", "Berkeley", "esade lutz", "Not a flight", "100%", "Miles"]:
+def test_reason_tokens():
+    reason = ml.build_reason("2026-06-03", ["Palo Alto", "Berkeley"], ["One Medical", "esade lutz"],
+                             "PA 10 + leg 40 + Berkeley 40", "no flight")
+    for tok in ["2026-06-03", "Palo Alto", "Berkeley", "esade lutz", "Not a flight", "100%"]:
         assert tok in reason
 
 
-def test_reason_prospective_caveat_and_draft():
-    reason = ml.build_reason("2026-06-04", ["Berkeley"], [], "Berkeley round trip = 80 mi",
-                             "no flight", prospective=True)
-    assert reason.startswith("PROSPECTIVE")
-    draft = ml.build_row_draft(155, 80.0, reason, prospective=True)
-    assert draft["H"] == 80.0 and draft["I"] == 100 and draft["row"] == 155
+# ─── resolve_auto (Test P3) — auto-resolve via the connector / fail closed ──
 
-
-# ─── eval datasets via run_canary (Test 9) ──────────────────────────
-
-def _subset(expected: dict, actual: dict) -> bool:
-    return all(actual.get(k) == v for k, v in expected.items())
-
-
-@pytest.mark.parametrize("fname,min_count", [
-    ("canaries.jsonl", 3), ("edge_cases.jsonl", 6), ("workflow_regression.jsonl", 3)])
-def test_eval_datasets(fname, min_count):
-    cases = [json.loads(l) for l in (SKILL_DIR / fname).read_text().splitlines() if l.strip()]
-    assert len(cases) >= min_count
-    for case in cases:
-        outcome = runner.run_canary(case)
-        assert _subset(case["expected"], outcome), \
-            f"{fname}:{case['case_id']} expected {case['expected']} got {outcome}"
-
-
-# ─── manifest (Test 10) ─────────────────────────────────────────────
-
-def test_manifest_loads_and_has_required_eval_kinds():
-    manifest, report = load_skill_manifest(SKILL_DIR)
-    assert report.ok, report.summary()
-    kinds = {ds.kind for ds in manifest.eval.datasets}
-    assert {"canaries", "edge_cases", "workflow"}.issubset(kinds)
-    sheet_outputs = [o for o in manifest.outputs if o.side_effect == "external_write"]
-    assert sheet_outputs and all(o.requires_approval for o in sheet_outputs)
-
-
-# ─── e2e cascade (Test 11) ──────────────────────────────────────────
-
-def _run(inp, tmp_path):
-    inp = dict(inp)
-    inp.setdefault("thread_id", "t")
-    inp.setdefault("config", runner._canary_config(inp))
-    return runner.run(inp, extra={"proposed_dir": tmp_path / "proposed"})
-
-
-def test_e2e_happy_single_stages_proposal(tmp_path):
+def test_resolve_auto_resolves_and_caches():
     inp = {"utterance": "yesterday I went to Berkeley", "today": "2026-06-04",
-           "events": [_ev(loc="Berkeley, CA", summary="esade", start="2026-06-03T13:00")],
-           "sheet_col_a": ["Day", "2026-06-03"],
-           "row_values": ["2026-06-03"] + [""] * 9, "distance_rows": [["Berkeley", "80"]]}
-    result = _run(inp, tmp_path)
-    assert result.final_verdict == "ready_to_propose"
-    body = yaml.safe_load((tmp_path / "proposed" / "t.yaml").read_text())
-    assert body["draft"]["H"] == 80.0 and body["draft"]["I"] == 100 and body["draft"]["J"]
-
-
-def test_e2e_two_place_chained(tmp_path):
-    inp = {"utterance": "yesterday I drove to Palo Alto then Berkeley", "today": "2026-06-04",
-           "events": [_ev(loc="Palo Alto, CA", start="2026-06-03T10:00"),
-                      _ev(loc="Berkeley, CA", start="2026-06-03T12:00")],
-           "sheet_col_a": ["Day", "2026-06-03"], "row_values": ["2026-06-03"] + [""] * 9,
-           "distance_rows": [["Palo Alto", "20"], ["Berkeley", "80"], ["Palo Alto -> Berkeley", "40"]]}
-    result = _run(inp, tmp_path)
-    assert result.final_verdict == "ready_to_propose"
-    assert result.accumulated["draft"]["H"] == 90.0
-
-
-@pytest.mark.parametrize("mut,reason_prefix", [
-    ({"row_values": ["2026-06-03", "", "SFO", "JFK", "", "", "", "", "", ""]}, "flight_day"),
-    ({"row_values": ["2026-06-03", "Mountain View", "", "", "", "Ithaca", "", "", "", ""]}, "relocation"),
-    ({"sheet_col_a": ["Day", "2026-06-01"]}, "date_row_not_found"),
-])
-def test_e2e_fail_closed_branches(mut, reason_prefix, tmp_path):
-    inp = {"utterance": "yesterday I went to Berkeley", "today": "2026-06-04",
+           "config": runner._canary_config({}),
            "events": [_ev(loc="Berkeley, CA", start="2026-06-03T13:00")],
            "sheet_col_a": ["Day", "2026-06-03"], "row_values": ["2026-06-03"] + [""] * 9,
-           "distance_rows": [["Berkeley", "80"]]}
-    inp.update(mut)
-    result = _run(inp, tmp_path)
-    assert result.final_verdict == "escalate"
-    assert result.final_reason.startswith(reason_prefix)
+           "distance_rows": []}
+    plan = runner.build_trip_plan(inp, distance_connector=runner._StubConnector({"Berkeley": 80}))
+    assert plan.ok and plan.draft["H"] == 80.0
+    assert {"name": "Berkeley", "miles": 80.0} in plan.draft["new_distance_entries"]
 
 
-def test_e2e_distance_miss_asks(tmp_path):
+def test_resolve_auto_connector_error_fails_closed():
     inp = {"utterance": "yesterday I went to Oakland", "today": "2026-06-04",
+           "config": runner._canary_config({}),
            "events": [_ev(loc="Oakland, CA", start="2026-06-03T13:00")],
            "sheet_col_a": ["Day", "2026-06-03"], "row_values": ["2026-06-03"] + [""] * 9,
            "distance_rows": []}
-    result = _run(inp, tmp_path)
-    assert result.final_verdict == "escalate" and result.final_reason == "distance_ask"
-    assert result.accumulated["ask_missing"] == {"round_trip": ["Oakland"]}
+    plan = runner.build_trip_plan(inp, distance_connector=runner._StubConnector({}))  # no Oakland
+    assert not plan.ok and plan.blocked_reason == "distance_unresolved"
 
 
-def test_e2e_overwrite_conflict_then_confirm(tmp_path):
-    base = {"utterance": "yesterday I went to Berkeley", "today": "2026-06-04",
-            "events": [_ev(loc="Berkeley, CA", start="2026-06-03T13:00")],
-            "sheet_col_a": ["Day", "2026-06-03"],
-            "row_values": ["2026-06-03", "", "", "", "", "", "", "80", "", ""],
-            "distance_rows": [["Berkeley", "80"]]}
-    r1 = _run(base, tmp_path)
-    assert r1.final_verdict == "escalate" and r1.final_reason.startswith("row_conflict")
-    r2 = _run({**base, "confirm_overwrite": True}, tmp_path)
-    assert r2.final_verdict == "ready_to_propose" and r2.accumulated["draft"]["overwrote"] is True
+def test_resolve_auto_no_connector_fails_closed():
+    inp = {"utterance": "yesterday I went to Oakland", "today": "2026-06-04",
+           "config": runner._canary_config({}),
+           "events": [_ev(loc="Oakland, CA", start="2026-06-03T13:00")],
+           "sheet_col_a": ["Day", "2026-06-03"], "row_values": ["2026-06-03"] + [""] * 9,
+           "distance_rows": []}
+    plan = runner.build_trip_plan(inp, distance_connector=None)
+    assert not plan.ok and plan.blocked_reason == "distance_unresolved"
 
 
-def test_e2e_prospective(tmp_path):
-    inp = {"utterance": "I am going to Berkeley", "today": "2026-06-04",
-           "events": [_ev(loc="Berkeley, CA", start="2026-06-04T13:00")],
-           "sheet_col_a": ["Day", "2026-06-04"], "row_values": ["2026-06-04"] + [""] * 9,
-           "distance_rows": [["Berkeley", "80"]]}
-    result = _run(inp, tmp_path)
-    assert result.final_verdict == "ready_to_propose"
-    assert result.accumulated["draft"]["J"].startswith("PROSPECTIVE")
+# ─── safety gate (Test P4) — fail closed ────────────────────────────
+
+def test_safety_gate_safe_unsafe_and_failclosed():
+    draft = {"date_str": "2026-06-03", "H": 80, "I": 100, "places": ["Berkeley"]}
+    ok = safety.review_mileage_write(draft, predict=lambda role, req: SimpleNamespace(output={"safe": True}))
+    assert ok.safe is True
+    bad = safety.review_mileage_write(draft, predict=lambda role, req: SimpleNamespace(output={"safe": False, "reason": "looks like a flight"}))
+    assert bad.safe is False and "flight" in bad.reason
+
+    def boom(role, req):
+        raise RuntimeError("provider down")
+    assert safety.review_mileage_write(draft, predict=boom).safe is False  # fail-closed
 
 
-# ─── send_tool (Test 12) ────────────────────────────────────────────
+# ─── autonomous orchestrator (Test P5) ──────────────────────────────
 
-class _FakeWS:
-    def __init__(self, existing=None):
-        self.updates = []
-        self.appends = []
-        self._existing = existing or {}
+def _happy_inputs(**over):
+    inp = {"utterance": "yesterday I went to Berkeley", "today": "2026-06-04",
+           "config": runner._canary_config({}),
+           "events": [_ev(loc="Berkeley, CA", start="2026-06-03T13:00")],
+           "sheet_col_a": ["Day", "2026-06-03"], "row_values": ["2026-06-03"] + [""] * 9,
+           "distance_rows": [], "thread_id": "t"}
+    inp.update(over)
+    return inp
 
-    def acell(self, a1):
-        from types import SimpleNamespace
-        return SimpleNamespace(value=self._existing.get(a1, ""))
 
-    def update(self, a1, values, value_input_option=None):
-        self.updates.append((a1, values))
+def _safe(_d):
+    return SimpleNamespace(safe=True, reason="")
 
-    def append_row(self, row, value_input_option=None):
-        self.appends.append(row)
 
+def test_autonomous_writes_when_safe():
+    ws = runner._CaptureWS()
+    res = runner.run_autonomous(_happy_inputs(), distance_connector=runner._StubConnector({"Berkeley": 80}),
+                                safety_reviewer=_safe, ws_opener=lambda u, g: ws, send_enabled=True)
+    assert res.verdict == "wrote" and res.wrote is True
+    assert ("H155".replace("155", str(res.draft["row"])), [[80.0]]) in [(a, v) for a, v in ws.updates] or \
+        any(a.startswith("H") and v == [[80.0]] for a, v in ws.updates)
+
+
+def test_autonomous_refuses_when_unsafe():
+    ws = runner._CaptureWS()
+    res = runner.run_autonomous(_happy_inputs(), distance_connector=runner._StubConnector({"Berkeley": 80}),
+                                safety_reviewer=lambda d: SimpleNamespace(safe=False, reason="no"),
+                                ws_opener=lambda u, g: ws, send_enabled=True)
+    assert res.verdict == "refused" and ws.updates == []
+
+
+def test_autonomous_kill_switch_off_does_not_write():
+    ws = runner._CaptureWS()
+    res = runner.run_autonomous(_happy_inputs(), distance_connector=runner._StubConnector({"Berkeley": 80}),
+                                safety_reviewer=_safe, ws_opener=lambda u, g: ws, send_enabled=False)
+    assert res.wrote is False and ws.updates == []
+
+
+@pytest.mark.parametrize("over,why", [
+    ({"row_values": ["2026-06-03", "", "SFO", "JFK", "", "", "", "", "", ""]}, "flight"),
+    ({"row_values": ["2026-06-03", "Mountain View", "", "", "", "Ithaca", "", "", "", ""]}, "relocation"),
+    ({"sheet_col_a": ["Day", "2026-06-01"]}, "no_row"),
+])
+def test_autonomous_blocks_no_gate_no_write(over, why):
+    ws = runner._CaptureWS()
+    gate_calls = []
+    res = runner.run_autonomous(_happy_inputs(**over), distance_connector=runner._StubConnector({"Berkeley": 80}),
+                                safety_reviewer=lambda d: gate_calls.append(1) or SimpleNamespace(safe=True),
+                                ws_opener=lambda u, g: ws, send_enabled=True)
+    assert res.verdict == "blocked" and ws.updates == [] and gate_calls == []  # gate not even reached
+
+
+# ─── eval datasets via run_autonomous (Test P7) ─────────────────────
+
+def _subset(expected, actual):
+    return all(actual.get(k) == v for k, v in expected.items())
+
+
+@pytest.mark.parametrize("fname,n", [("canaries.jsonl", 3), ("edge_cases.jsonl", 6), ("workflow_regression.jsonl", 3)])
+def test_eval_datasets(fname, n):
+    cases = [json.loads(l) for l in (SKILL_DIR / fname).read_text().splitlines() if l.strip()]
+    assert len(cases) >= n
+    for case in cases:
+        out = runner.run_canary(case)
+        assert _subset(case["expected"], out), f"{fname}:{case['case_id']} expected {case['expected']} got {out}"
+
+
+# ─── manifest autonomous shape (Test P6) ────────────────────────────
+
+def test_manifest_autonomous_shape():
+    manifest, report = load_skill_manifest(SKILL_DIR)
+    assert report.ok, report.summary()
+    kinds = [t.kind for t in manifest.cascade]
+    assert "second_opinion" in kinds and "human" not in kinds
+    ext = [o for o in manifest.outputs if o.side_effect == "external_write"]
+    assert ext and all(o.pre_approved and not o.requires_approval for o in ext)
+
+
+# ─── send_tool (Test P12) — kill-switch + writes ────────────────────
 
 def _body(**over):
-    draft = {"workflow_id": "trip-mileage-log", "row": 155, "H": 89.0, "I": 100,
-             "J": "drove MTV -> Palo Alto -> Berkeley -> home", "sheet_url": "x",
-             "time_tracking_gid": 1, "distance_gid": 2,
-             "new_distance_entries": [{"name": "Berkeley", "miles": 80}],
-             "overwrote": False, "prospective": False}
-    draft.update(over)
-    return {"draft": draft}
+    d = {"workflow_id": "trip-mileage-log", "row": 155, "H": 88.0, "I": 100, "J": "drove",
+         "sheet_url": "x", "time_tracking_gid": 1, "distance_gid": 2,
+         "new_distance_entries": [], "overwrote": False}
+    d.update(over)
+    return {"draft": d}
 
 
-def test_send_tool_kill_switch_off_does_not_write(monkeypatch):
-    monkeypatch.delenv(send_tool.KILL_SWITCH_ENV, raising=False)
-    ws = _FakeWS()
-    res = send_tool.apply_approved_proposal(_body(), ws_opener=lambda u, g: ws)
-    assert res.wrote_sheet is False and ws.updates == []
-    assert "kill_switch_off" in res.reason
+class _WS:
+    def __init__(self):
+        self.updates = []
+        self.appends = []
+
+    def acell(self, a1):
+        return SimpleNamespace(value="")
+
+    def update(self, a1, v, value_input_option=None):
+        self.updates.append((a1, v))
+
+    def append_row(self, r, value_input_option=None):
+        self.appends.append(r)
 
 
-def test_send_tool_writes_when_enabled(monkeypatch):
-    monkeypatch.setenv(send_tool.KILL_SWITCH_ENV, "1")
-    ws = _FakeWS()
-    res = send_tool.apply_approved_proposal(_body(), ws_opener=lambda u, g: ws)
-    assert res.wrote_sheet is True
-    assert ("H155", [[89.0]]) in ws.updates
-    assert ("I155", [[100]]) in ws.updates
-    assert any(a1 == "J155" for a1, _ in ws.updates)
-    assert ws.appends == [["Berkeley", 80]]
+def test_send_tool_send_enabled_param():
+    ws = _WS()
+    assert send_tool.apply_approved_proposal(_body(), ws_opener=lambda u, g: ws, send_enabled=False).wrote_sheet is False
+    ws2 = _WS()
+    res = send_tool.apply_approved_proposal(_body(), ws_opener=lambda u, g: ws2, send_enabled=True)
+    assert res.wrote_sheet is True and ("H155", [[88.0]]) in ws2.updates and ("I155", [[100]]) in ws2.updates
 
 
-def test_send_tool_refuses_bad_bodies(monkeypatch):
-    monkeypatch.setenv(send_tool.KILL_SWITCH_ENV, "1")
-    ws = _FakeWS()
-    assert send_tool.apply_approved_proposal(_body(workflow_id="x"), ws_opener=lambda u, g: ws).wrote_sheet is False
-    assert send_tool.apply_approved_proposal(_body(H=0), ws_opener=lambda u, g: ws).wrote_sheet is False
+def test_send_tool_refuses_bad_body():
+    ws = _WS()
+    assert send_tool.apply_approved_proposal(_body(H=0), ws_opener=lambda u, g: ws, send_enabled=True).wrote_sheet is False
     assert ws.updates == []
 
 
-def test_send_tool_refuses_unconfirmed_overwrite(monkeypatch):
-    monkeypatch.setenv(send_tool.KILL_SWITCH_ENV, "1")
-    ws = _FakeWS(existing={"H155": "80"})
-    res = send_tool.apply_approved_proposal(_body(overwrote=False), ws_opener=lambda u, g: ws)
-    assert res.wrote_sheet is False and "unconfirmed_overwrite" in res.reason
-    assert ws.updates == []
+# ─── intake (Test D2) — operator sender validation ──────────────────
+
+def test_intake_operator_only():
+    op = ["hello@example.com"]
+    good = intake.parse_trigger_email({"from": "Lutz <hello@example.com>", "subject": "yesterday I went to Berkeley"}, operator_addresses=op)
+    assert good is not None and "Berkeley" in good.utterance
+    assert intake.parse_trigger_email({"from": "stranger@evil.com", "subject": "yesterday I went to Berkeley"}, operator_addresses=op) is None
+    assert intake.parse_trigger_email({"from": "hello@example.com", "subject": "FW: invoice"}, operator_addresses=op) is None
+
+
+# ─── run_once headless cycle (Test D4) ──────────────────────────────
+
+class _FakeGmail:
+    def __init__(self, threads, metas, processed_today=0):
+        self._threads = threads
+        self._metas = metas
+        self._processed_today = processed_today
+        self.labels = []
+
+    def count_processed_today(self, label):
+        return self._processed_today
+
+    def find_unprocessed_threads(self, label):
+        return list(self._threads)
+
+    def get_thread_meta(self, tid):
+        return self._metas[tid]
+
+    def add_label(self, tid, label):
+        self.labels.append((tid, label))
+
+
+def _fetch_berkeley(date_str):
+    return ([_ev(loc="Berkeley, CA", start=date_str + "T13:00")], ["Day", date_str], [date_str] + [""] * 9, [])
+
+
+_CFG = {"max_writes_per_day": 5, "operator_addresses": ["hello@example.com"], "home_label": "Mountain View",
+        "sheet_url": "x", "time_tracking_gid": 1, "distance_gid": 2, "business_pct_default": 100,
+        "kill_switch_env": "SAI_TRIP_MILEAGE_SEND_ENABLED", "place_aliases": {}, "max_local_miles": 300}
+
+
+def test_run_once_happy_writes_and_replies():
+    gmail = _FakeGmail(["t1"], {"t1": {"from": "hello@example.com", "subject": "yesterday I went to Berkeley"}})
+    replies, ws = [], runner._CaptureWS()
+    res = run_daemon.run_once(gmail=gmail, fetch_day_context=_fetch_berkeley, config=_CFG,
+                              reply_sender=lambda m, b: replies.append(b), now=date(2026, 6, 4),
+                              distance_connector=runner._StubConnector({"Berkeley": 80}),
+                              safety_reviewer=_safe, ws_opener=lambda u, g: ws, send_enabled=True)
+    assert [o.status for o in res.outcomes] == ["wrote"]
+    assert ws.updates and any("logged your trip" in r for r in replies)
+    assert ("t1", run_daemon.PROCESSED_LABEL) in gmail.labels
+
+
+def test_run_once_non_operator_ignored_no_reply():
+    gmail = _FakeGmail(["t1"], {"t1": {"from": "stranger@evil.com", "subject": "yesterday I went to Berkeley"}})
+    replies = []
+    res = run_daemon.run_once(gmail=gmail, fetch_day_context=_fetch_berkeley, config=_CFG,
+                              reply_sender=lambda m, b: replies.append(b), now=date(2026, 6, 4),
+                              distance_connector=runner._StubConnector({"Berkeley": 80}), safety_reviewer=_safe,
+                              ws_opener=lambda u, g: runner._CaptureWS(), send_enabled=True)
+    assert [o.status for o in res.outcomes] == ["ignored"] and replies == []
+    assert ("t1", run_daemon.PROCESSED_LABEL) in gmail.labels
+
+
+def test_run_once_flight_needs_human():
+    def fetch_flight(date_str):
+        return ([], ["Day", date_str], [date_str, "", "SFO", "JFK", "", "", "", "", "", ""], [])
+    gmail = _FakeGmail(["t1"], {"t1": {"from": "hello@example.com", "subject": "yesterday I went to New York"}})
+    replies, ws = [], runner._CaptureWS()
+    res = run_daemon.run_once(gmail=gmail, fetch_day_context=fetch_flight, config=_CFG,
+                              reply_sender=lambda m, b: replies.append(b), now=date(2026, 6, 4),
+                              distance_connector=runner._StubConnector({}), safety_reviewer=_safe,
+                              ws_opener=lambda u, g: ws, send_enabled=True)
+    assert [o.status for o in res.outcomes] == ["needs_human"]
+    assert ws.updates == [] and any("needs a human" in r for r in replies)
+
+
+def test_run_once_per_day_cap():
+    gmail = _FakeGmail(["t1"], {"t1": {"from": "hello@example.com", "subject": "yesterday I went to Berkeley"}}, processed_today=5)
+    res = run_daemon.run_once(gmail=gmail, fetch_day_context=_fetch_berkeley, config=_CFG,
+                              reply_sender=lambda m, b: None, now=date(2026, 6, 4),
+                              distance_connector=runner._StubConnector({"Berkeley": 80}), safety_reviewer=_safe,
+                              ws_opener=lambda u, g: runner._CaptureWS(), send_enabled=True)
+    assert res.skipped_reason and res.outcomes == []

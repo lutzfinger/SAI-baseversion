@@ -45,6 +45,7 @@ def apply_approved_proposal(
     proposal_body: dict[str, Any],
     *,
     ws_opener: Optional[Callable[[str, int], Any]] = None,
+    send_enabled: Optional[bool] = None,
 ) -> ApplyResult:
     """Write an operator-approved proposal to the Google Sheet. Fail-closed on
     every off-shape input; no-op (no write) when the kill switch is off."""
@@ -69,9 +70,10 @@ def apply_approved_proposal(
     if not reason_text:
         return ApplyResult(False, reason="empty_reason")
 
-    # Kill switch — defaults OFF (§16e). Operator enables explicitly after a
-    # green dry-run.
-    if os.environ.get(KILL_SWITCH_ENV, "0") != "1":
+    # Kill switch — defaults OFF (§16e). `send_enabled` overrides the env for
+    # hermetic tests; production passes None → reads the env.
+    enabled = send_enabled if send_enabled is not None else (os.environ.get(KILL_SWITCH_ENV, "0") == "1")
+    if not enabled:
         log.info("kill_switch_off — would have written H%d=%s", row, miles)
         return ApplyResult(False, cells={"H": miles, "I": business},
                            reason=f"kill_switch_off:set_{KILL_SWITCH_ENV}=1_to_enable")
