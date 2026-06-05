@@ -1,51 +1,52 @@
-# trip-mileage-log
+# trip-mileage-log (v0.3.0 — headless email daemon)
 
 Log a **local-drive** trip into the operator's mileage Google Sheet — column
-**H** (round-trip miles), **I** (100% business), **J** (reason) — from a plain
-sentence like *"yesterday I went to Berkeley"* or *"I am going to Berkeley"*.
+**H** (round-trip miles), **I** (100% business), **J** (reason) — triggered by an
+**email**, fully headless, with **no per-run sign-off**.
 
-Deterministic SAI workflow (no LLM). Read-only until the operator ✅; the actual
-sheet write happens only in `send_tool.py`, behind a kill-switch that defaults
-OFF (PRINCIPLES §2/§9/§16e).
+You email `sai@` (or a thread gets tagged `SAI/trip_mileage`) "yesterday I went
+to Berkeley"; a launchd poller does the rest.
 
-## What it does
-1. **Parse the date** from the sentence (yesterday / today / now / "I am going" /
-   explicit date), and whether it's *prospective*.
-2. **Read that day's Google Calendar** to find where you drove. Two distinct
-   places → one **chained loop** `home → A → B → home`.
-3. **Confirm it was a drive, not a flight** — fails closed if the sheet row has
-   an airport (cols C/D) or the calendar has a flight event. (Column **G
-   "Travel Day" is intentionally NOT used** — it is `TRUE` on local-drive days
-   too.) Also fails closed on a morning≠evening **relocation**.
-4. **Look up round-trip miles** from the workbook's `Distance MTV to` tab.
-   `single = round trip`; `two = rt(A)/2 + leg(A,B) + rt(B)/2` (one-way ≈
-   round-trip / 2). On a miss it **asks** you for the number and remembers it.
-5. **Guard against overwrite** — refuses to clobber an already-filled H/I/J row
-   unless you confirm.
-6. **Stage an approval proposal** with the exact H/I/J it will write.
+## Pipeline (per trigger email)
+1. **Validate sender** — act ONLY on an allowlisted operator address (fail-closed).
+2. **Parse the date** (yesterday / today / "I am going" / explicit).
+3. **Read the calendar** for that day → destination(s); two distinct places = one
+   chained loop `home → A → B → home`.
+4. **Confirm a drive, not a flight** — fail closed on an airport (cols C/D) or a
+   flight calendar event (column **G is NOT used** — TRUE on drive days too), or a
+   morning≠evening relocation.
+5. **Auto-resolve the distance** via the `distance` framework connector (keyless
+   OSRM route + Nominatim geocode), **cached** into the `Distance MTV to` tab so
+   each place hits the network once. **It never asks you.** Unresolvable → fail closed.
+6. **Plausibility bound** — refuse a loop longer than `max_local_miles` (a flight).
+7. **Different-model safety gate** (`safety_gate_high`) — "is this safe & wanted?";
+   fail closed on anything but a clear yes.
+8. **Write** H/I/J (behind the kill-switch) and **reply** on the thread. Any
+   fail-closed step → a "needs human" threaded reply, nothing written.
 
-## Run (read-only — stages a proposal, never writes)
+No human approves each write — that's the point. The safety gate + the
+deterministic gates + the plausibility bound + the kill-switch are the guard.
+
+## Try it without the daemon (dry-run, no write)
 ```bash
 python skills/trip-mileage-log/runner.py \
   --utterance "yesterday I went to Berkeley" --today 2026-06-04
 ```
-First runs ask-and-store distances (the `Distance MTV to` tab starts empty);
-reply with the round-trip miles and they're remembered. You can pre-seed common
-places via `seed_distances` in the private config.
+(omit `--write`; the kill-switch also stays off unless `SAI_TRIP_MILEAGE_SEND_ENABLED=1`.)
 
-## Configure (private values — §17/§18)
-Operator values live in `~/Lutz_Dev/SAI/config/trip_mileage.yaml` (home label,
-sheet URL, tab gids, kill-switch name, place aliases). The base skill is
-values-free; the overlay merges this to `~/.sai-runtime/config/trip_mileage.yaml`.
+## Install the daemon (operator)
+1. Configure private values in `~/Lutz_Dev/SAI/config/trip_mileage.yaml`
+   (`operator_addresses`, `reply_to`, `sai_from`, `distance`, `max_local_miles`,
+   `max_writes_per_day`).
+2. Wire `run_daemon.main()` to your Gmail operator token + threaded reply sender
+   (From `sai@`, To the operator only).
+3. Register a `ScheduledJobSpec` (with `wants_watchdog=True`) in
+   `SAI/app/control_plane/scheduled_jobs.py` and install via `make ensure-scheduled-jobs`.
+4. Flip the kill-switch on after a green dry-run: `export SAI_TRIP_MILEAGE_SEND_ENABLED=1`.
 
-## Enable the write (after a green dry-run)
-The sheet write fires from `send_tool.py` on an approved proposal ONLY when the
-kill switch is on:
-```bash
-export SAI_TRIP_MILEAGE_SEND_ENABLED=1
-python skills/trip-mileage-log/send_tool.py <approved-proposal.yaml>
-```
+## Composes (does not contain)
+The `distance` connector is a separate **framework primitive**
+(`app/connectors/distance.py`, §33a) — shipped on its own; this skill composes it.
 
-## Files
-See `MANIFEST.txt`. Tests: `tests/test_trip_mileage_log.py`,
-`tests/test_calendar_events_on_date.py` (all offline).
+See `MANIFEST.txt`, `SECURITY.md`. Tests: `tests/test_trip_mileage_log.py`,
+`tests/test_distance_connector.py`, `tests/test_calendar_events_on_date.py` (all offline).

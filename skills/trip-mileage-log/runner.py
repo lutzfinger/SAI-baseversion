@@ -30,9 +30,10 @@ import argparse
 import json
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _SAI_ROOT = Path(__file__).resolve().parents[2]
 if str(_SAI_ROOT) not in sys.path:
@@ -135,6 +136,7 @@ def resolve_distance_handler(ctx: CascadeContext, cfg: dict[str, Any]) -> Cascad
     config = _cfg(ctx)
     home = config["home_label"]
     aliases = config.get("place_aliases", {})
+    max_local = float(config.get("max_local_miles", 300))
     if ctx.inputs.get("destinations"):
         res = {"places": list(ctx.inputs["destinations"]), "events_used": [],
                "low_confidence": False, "too_many": len(ctx.inputs["destinations"]) > 2}
@@ -146,26 +148,37 @@ def resolve_distance_handler(ctx: CascadeContext, cfg: dict[str, Any]) -> Cascad
         ctx.accumulated["block_reason"] = f"places={res['places']}"
         return CascadeStep(kind="escalate", reason="too_many_destinations")
     if not res["places"]:
-        ctx.accumulated["ask_message"] = "I couldn't find where you drove — tell me the destination."
-        ctx.accumulated["ask_missing"] = {"places": []}
-        return CascadeStep(kind="escalate", reason="distance_ask")
+        ctx.accumulated["block_reason"] = "no destination found in calendar"
+        return CascadeStep(kind="escalate", reason="no_destination")
 
     rt, leg = ml.parse_distance_tab(ctx.accumulated.get("distance_rows", []))
-    provided = {"round_trip": ctx.inputs.get("provided_round_trip", {}),
+    provided = {"round_trip": dict(ctx.inputs.get("provided_round_trip", {})),
                 "leg": _coerce_leg(ctx.inputs.get("provided_leg", {}))}
+    # Phase 2: auto-resolve any missing round-trip / leg via the distance
+    # connector (Ship-1 primitive); cache them; NEVER ask the operator.
+    try:
+        _autoresolve_into(provided, res["places"], home, rt, leg,
+                          ctx.extra.get("distance_connector"))
+    except Exception as exc:  # DistanceUnavailable / network / parse — fail closed (#6)
+        ctx.accumulated["block_reason"] = f"distance_unresolved:{type(exc).__name__}:{exc}"
+        return CascadeStep(kind="escalate", reason="distance_unresolved")
+
     dist = ml.chained_loop_miles(res["places"], rt, leg, provided)
-    if "ask" in dist:
-        ctx.accumulated["ask_message"] = dist["ask"]
-        ctx.accumulated["ask_missing"] = dist["missing"]
-        return CascadeStep(kind="escalate", reason="distance_ask")
+    if "ask" in dist:  # still missing (no connector available) → fail closed, no ask
+        ctx.accumulated["block_reason"] = f"distance_unresolved:{dist.get('missing')}"
+        return CascadeStep(kind="escalate", reason="distance_unresolved")
+    miles = dist["miles"]
+    if miles > max_local:  # deterministic plausibility bound (a flight, not a drive)
+        ctx.accumulated["block_reason"] = f"loop {miles} mi exceeds max_local_miles {max_local}"
+        return CascadeStep(kind="escalate", reason="distance_implausible")
 
     ctx.accumulated.update({
         "places": res["places"], "events_used": res["events_used"],
-        "low_confidence": res["low_confidence"], "miles": dist["miles"],
+        "low_confidence": res["low_confidence"], "miles": miles,
         "miles_breakdown": dist["breakdown"], "new_distance_entries": dist.get("new_entries", []),
+        "plausibility": f"loop {miles} mi <= max_local {max_local} (a drive)",
     })
-    return CascadeStep(kind="continue", reason=f"miles={dist['miles']}",
-                       metadata={"miles": dist["miles"]})
+    return CascadeStep(kind="continue", reason=f"miles={miles}", metadata={"miles": miles})
 
 
 def overwrite_gate_handler(ctx: CascadeContext, cfg: dict[str, Any]) -> CascadeStep:
@@ -195,6 +208,12 @@ def build_draft_handler(ctx: CascadeContext, cfg: dict[str, Any]) -> CascadeStep
     draft["sheet_url"] = config["sheet_url"]
     draft["time_tracking_gid"] = config["time_tracking_gid"]
     draft["distance_gid"] = config["distance_gid"]
+    # Context the safety gate reviews.
+    draft["date_str"] = ctx.accumulated["date_str"]
+    draft["places"] = ctx.accumulated.get("places", [])
+    draft["route"] = " → ".join([config["home_label"]] + draft["places"] + [config["home_label"]])
+    draft["not_flying_evidence"] = ctx.accumulated.get("not_flying_evidence", "")
+    draft["plausibility"] = ctx.accumulated.get("plausibility", "ok")
     ctx.accumulated["draft"] = draft
     return CascadeStep(kind="continue", reason="draft_built", metadata={"row": draft["row"]})
 
@@ -262,24 +281,164 @@ def _live_calendar_events(date_str: str, config: dict) -> list[dict]:
     return conn.list_events_on_date(date_str, tz_offset="-07:00")
 
 
-# ─── public entry points ─────────────────────────────────────────────
+# ─── distance auto-resolve (composes the Ship-1 connector) ──────────────
 
-def run(inputs: dict[str, Any], *, extra: dict[str, Any] | None = None) -> CascadeResult:
-    manifest, report = load_skill_manifest(Path(__file__).parent)
-    if not report.ok:
-        raise RuntimeError(f"manifest invalid: {report.summary()}")
-    return run_cascade(manifest=manifest, inputs=inputs, extra=extra or {})
+def _autoresolve_into(provided: dict, places: list, home: str, rt_tab: dict, leg_tab: dict, conn: Any) -> None:
+    """Fill any missing round-trip / leg distances via the connector (mutates
+    `provided`). Leaves a value missing only when no connector is available
+    (caller then fails closed). Raises DistanceUnavailable on a resolve error."""
+    prt = {ml._canon(k): v for k, v in provided["round_trip"].items()}
+    for p in places:
+        if ml._canon(p) in rt_tab or ml._canon(p) in prt:
+            continue
+        if conn is None:
+            continue
+        provided["round_trip"][p] = conn.round_trip_miles(home, p)
+    if len(places) == 2 and conn is not None:
+        a, b = places
+        canon_legs = {(ml._canon(x), ml._canon(y)) for (x, y) in provided["leg"].keys()}
+        have = (ml._leg_lookup(leg_tab, a, b) is not None
+                or (ml._canon(a), ml._canon(b)) in canon_legs
+                or (ml._canon(b), ml._canon(a)) in canon_legs)
+        if not have:
+            provided["leg"][(a, b)] = conn.leg_miles(a, b)
+
+
+# ─── autonomous orchestrator (cornell run_autonomous pattern) ───────────
+
+@dataclass
+class PlanResult:
+    ok: bool
+    draft: dict | None
+    blocked_reason: str
+    accumulated: dict
+
+
+@dataclass
+class AutoResult:
+    verdict: str            # wrote | refused | blocked | not_written
+    reason: str
+    wrote: bool = False
+    draft: dict | None = None
+    cells: dict | None = None
+    safety_reason: str = ""
+
+
+_DET_TIERS = (
+    ("validate_inputs", validate_inputs_handler),
+    ("read_context", read_context_handler),
+    ("not_flying_gate", not_flying_gate_handler),
+    ("resolve_distance", resolve_distance_handler),
+    ("overwrite_gate", overwrite_gate_handler),
+    ("build_draft", build_draft_handler),
+)
+
+
+def build_trip_plan(inputs: dict[str, Any], *, distance_connector: Any = None) -> PlanResult:
+    """Run the deterministic tiers (no LLM, no write) → draft or a blocked
+    reason. Split from the gate/write for testability."""
+    ctx = CascadeContext(workflow_id=WORKFLOW_ID, inputs=dict(inputs))
+    if distance_connector is not None:
+        ctx.extra["distance_connector"] = distance_connector
+    for _tier_id, handler in _DET_TIERS:
+        step = handler(ctx, {})
+        if step.kind in ("no_op", "escalate"):
+            return PlanResult(False, None, step.reason, ctx.accumulated)
+        ctx.accumulated.update(step.metadata)
+    return PlanResult(True, ctx.accumulated.get("draft"), "", ctx.accumulated)
+
+
+def _default_safety_reviewer(draft: dict) -> Any:
+    import safety
+    return safety.review_mileage_write(draft)
+
+
+def run_autonomous(
+    inputs: dict[str, Any],
+    *,
+    distance_connector: Any = None,
+    safety_reviewer: Callable[[dict], Any] | None = None,
+    ws_opener: Any = None,
+    send_enabled: bool | None = None,
+) -> AutoResult:
+    """Plan → (deterministic plausibility, inside plan) → different-model safety
+    gate → write. NO human in the loop. Fail-closed at every step."""
+    plan = build_trip_plan(inputs, distance_connector=distance_connector)
+    if not plan.ok:
+        return AutoResult("blocked", plan.blocked_reason)
+    draft = plan.draft
+    reviewer = safety_reviewer or _default_safety_reviewer
+    verdict = reviewer(draft)
+    if not getattr(verdict, "safe", False):
+        return AutoResult("refused", f"safety:{getattr(verdict, 'reason', '')}",
+                          draft=draft, safety_reason=getattr(verdict, "reason", ""))
+    import send_tool
+    res = send_tool.apply_approved_proposal({"draft": draft}, ws_opener=ws_opener,
+                                            send_enabled=send_enabled)
+    return AutoResult("wrote" if res.wrote_sheet else "not_written", res.reason,
+                      wrote=res.wrote_sheet, draft=draft, cells=res.cells)
+
+
+def run(inputs: dict[str, Any], **kw: Any) -> AutoResult:  # back-compat alias
+    return run_autonomous(inputs, **kw)
+
+
+# ─── eval (drives the REAL autonomous path with injected stubs) ─────────
+
+class _StubConnector:
+    def __init__(self, distances: dict):
+        self._d = {ml._canon(k): float(v) for k, v in (distances or {}).items()}
+
+    def round_trip_miles(self, home: str, place: str) -> float:
+        v = self._d.get(ml._canon(place))
+        if v is None:
+            from app.connectors.distance import DistanceUnavailable
+            raise DistanceUnavailable(f"stub: no round-trip for {place!r}")
+        return v
+
+    def leg_miles(self, a: str, b: str) -> float:
+        v = self._d.get(ml._canon(f"{a} -> {b}")) or self._d.get(ml._canon(f"{b} -> {a}"))
+        if v is None:
+            from app.connectors.distance import DistanceUnavailable
+            raise DistanceUnavailable(f"stub: no leg {a}->{b}")
+        return v
+
+
+class _CaptureWS:
+    def __init__(self):
+        self.updates: list = []
+        self.appends: list = []
+
+    def acell(self, a1):
+        from types import SimpleNamespace
+        return SimpleNamespace(value="")
+
+    def update(self, a1, values, value_input_option=None):
+        self.updates.append((a1, values))
+
+    def append_row(self, row, value_input_option=None):
+        self.appends.append(row)
+
+
+class _Verdict:
+    def __init__(self, safe: bool, reason: str = ""):
+        self.safe = safe
+        self.reason = reason
 
 
 def run_canary(case: dict) -> dict:
-    """Fast eval: drive the REAL cascade on in-memory injected data and map the
-    verdict to a compact outcome dict for comparison against `expected`."""
+    """Drive run_autonomous hermetically: stub connector (from stub_distances),
+    stub safety reviewer (unsafe iff input.unsafe), capturing fake worksheet,
+    kill-switch forced on via send_enabled. NEVER a real sheet/network."""
     inp = dict(case["input"])
     inp.setdefault("thread_id", case.get("case_id", "canary"))
     inp.setdefault("config", _canary_config(inp))
-    with tempfile.TemporaryDirectory() as td:
-        result = run(inp, extra={"proposed_dir": Path(td) / "proposed"})
-    return _outcome(result)
+    conn = _StubConnector(inp["stub_distances"]) if inp.get("stub_distances") is not None else None
+    reviewer = (lambda d: _Verdict(False, "stub-unsafe")) if inp.get("unsafe") else (lambda d: _Verdict(True))
+    ws = _CaptureWS()
+    res = run_autonomous(inp, distance_connector=conn, safety_reviewer=reviewer,
+                         ws_opener=lambda u, g: ws, send_enabled=True)
+    return _auto_outcome(res, ws)
 
 
 def _canary_config(inp: dict) -> dict:
@@ -288,59 +447,62 @@ def _canary_config(inp: dict) -> dict:
         "sheet_url": "https://example/edit", "time_tracking_gid": 1, "distance_gid": 2,
         "business_pct_default": 100, "kill_switch_env": "SAI_TRIP_MILEAGE_SEND_ENABLED",
         "place_aliases": inp.get("place_aliases", {}), "seed_distances": {},
+        "max_local_miles": inp.get("max_local_miles", 300),
     }
 
 
-def _outcome(result: CascadeResult) -> dict:
-    acc = result.accumulated
-    if result.final_verdict == "ready_to_propose":
-        d = acc.get("draft", {})
-        return {"verdict": "propose", "miles": d.get("H"), "business_pct": d.get("I"),
-                "places": acc.get("places", []), "prospective": d.get("prospective", False),
-                "overwrote": d.get("overwrote", False)}
-    if result.final_verdict == "no_op":
-        return {"verdict": "no_op", "reason": result.final_reason}
-    reason = result.final_reason
-    if reason.startswith("flight_day"):
-        return {"verdict": "blocked", "why": "flight"}
-    if reason.startswith("relocation"):
-        return {"verdict": "blocked", "why": "relocation"}
-    if reason == "too_many_destinations":
-        return {"verdict": "blocked", "why": "too_many"}
-    if reason == "date_row_not_found":
-        return {"verdict": "blocked", "why": "no_row"}
-    if reason.startswith("row_conflict"):
-        return {"verdict": "conflict", "cols": acc.get("conflict_cols", [])}
-    if reason == "distance_ask":
-        return {"verdict": "ask", "missing": acc.get("ask_missing", {}),
-                "message": acc.get("ask_message", "")}
-    return {"verdict": "escalate", "reason": reason}
+_BLOCK_WHY = {
+    "too_many_destinations": "too_many", "date_row_not_found": "no_row",
+    "no_destination": "no_destination", "distance_unresolved": "unresolved",
+    "distance_implausible": "implausible",
+}
+
+
+def _auto_outcome(res: AutoResult, ws: Any) -> dict:
+    if res.verdict == "wrote":
+        d = res.draft or {}
+        return {"verdict": "wrote", "wrote": True, "miles": d.get("H"),
+                "business_pct": d.get("I"), "places": d.get("places", []),
+                "prospective": d.get("prospective", False), "overwrote": d.get("overwrote", False)}
+    if res.verdict == "refused":
+        return {"verdict": "refused", "wrote": False}
+    if res.verdict == "blocked":
+        r = res.reason
+        if r.startswith("flight_day"):
+            why = "flight"
+        elif r.startswith("relocation"):
+            why = "relocation"
+        elif r.startswith("row_conflict"):
+            why = "conflict"
+        else:
+            why = _BLOCK_WHY.get(r, r)
+        return {"verdict": "blocked", "why": why, "wrote": False}
+    return {"verdict": res.verdict, "wrote": res.wrote}
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="trip-mileage-log (read-only; stages an approval proposal).")
+    p = argparse.ArgumentParser(description="trip-mileage-log autonomous runner.")
     p.add_argument("--utterance", required=True)
-    p.add_argument("--today", required=True, help="YYYY-MM-DD (injected, no Date.now)")
+    p.add_argument("--today", required=True, help="YYYY-MM-DD (injected)")
     p.add_argument("--config", default=None)
-    p.add_argument("--inject", default=None, help="path to a JSON file of injected events/sheet data (dry-run)")
+    p.add_argument("--inject", default=None, help="JSON file of injected events/sheet data (dry-run)")
     p.add_argument("--thread-id", default="cli")
+    p.add_argument("--write", action="store_true", help="actually write (else dry-run; kill-switch still applies)")
     args = p.parse_args()
-
     inputs: dict[str, Any] = {"utterance": args.utterance, "today": args.today,
                               "config_path": args.config, "thread_id": args.thread_id}
     if args.inject:
         inputs.update(json.loads(Path(args.inject).read_text()))
-
-    with tempfile.TemporaryDirectory() as td:
-        result = run(inputs, extra={"proposed_dir": Path(td) / "proposed"})
-        out = _outcome(result)
-        print(json.dumps({"final_verdict": result.final_verdict,
-                          "final_reason": result.final_reason,
-                          "outcome": out,
-                          "audit": [a["tier"] + ":" + a["kind"] for a in result.audit_log],
-                          "draft": result.accumulated.get("draft")},
-                         indent=2, default=str))
-    return 0 if result.final_verdict in ("ready_to_propose",) else 1
+    conn = None
+    if "stub_distances" not in inputs:
+        from app.connectors.distance import DistanceConnector
+        cfg = inputs.get("config") or load_trip_config(args.config)
+        inputs.setdefault("config", cfg)
+        conn = DistanceConnector.from_config(cfg.get("distance"))
+    res = run_autonomous(inputs, distance_connector=conn, send_enabled=(args.write or None))
+    print(json.dumps({"verdict": res.verdict, "reason": res.reason, "wrote": res.wrote,
+                      "draft": res.draft}, indent=2, default=str))
+    return 0 if res.verdict in ("wrote", "refused") else 1
 
 
 if __name__ == "__main__":
