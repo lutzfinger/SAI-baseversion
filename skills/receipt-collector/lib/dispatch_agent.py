@@ -63,6 +63,7 @@ EVAL_INBOX_PATH = Path.home() / "Library" / "Logs" / "SAI" / "eval_feedback_inbo
 
 class Verdict(str, Enum):
     COST_COMPILER = "COST_COMPILER"
+    INVOICE_DRAFT = "INVOICE_DRAFT"
     EVAL_FEEDBACK = "EVAL_FEEDBACK"
     GENERAL_QUERY = "GENERAL_QUERY"
     AD_HOC_CAPABLE = "AD_HOC_CAPABLE"
@@ -75,6 +76,7 @@ class Verdict(str, Enum):
 # branches on Verdict, not on this mapping.
 CASE_FOR_VERDICT: dict[Verdict, str] = {
     Verdict.COST_COMPILER: "a",
+    Verdict.INVOICE_DRAFT: "a",
     Verdict.EVAL_FEEDBACK: "a",
     Verdict.GENERAL_QUERY: "a",
     Verdict.AD_HOC_CAPABLE: "c",
@@ -119,6 +121,19 @@ _COST_COMPILER_PATTERNS = [
     (r"\bprepare\s+(an?\s+)?(invoice|expense\s+report)\b.*\b(trip|customer)\b", "prepare_invoice"),
 ]
 
+# Revenue-invoice-to-a-person triggers (distinct from the trip/customer
+# reimbursement COST_COMPILER above). Require an amount + a recipient and do
+# NOT carry trip/receipt/expense context (those are cost-compiler's).
+_INVOICE_DRAFT_PATTERNS = [
+    (r"\bsend\s+an\s+invoice\s+to\s+.+\bover\b\s*\$?\d", "send_invoice_to_over"),
+    (r"\bsend\s+\w+.*\ban\s+invoice\s+over\b\s*\$?\d", "send_name_invoice_over"),
+    (r"\b(invoice|bill)\s+\w+.*\b(over|for)\b.*\$?\d", "invoice_name_amount"),
+]
+# Guard: if any of these appear, it's the trip/reimbursement flow, not a
+# revenue invoice to a person — let COST_COMPILER own it.
+_NOT_INVOICE_DRAFT = re.compile(
+    r"\b(trip|receipts?|expenses?|reimburse|compile|travel)\b", re.IGNORECASE)
+
 # Explicit eval-feedback signals
 _EVAL_FEEDBACK_PATTERNS = [
     (r"\bwrong\s+label\b", "eval_wrong_label"),
@@ -135,6 +150,12 @@ def _rules_classify(subject: str, body: str) -> Optional[Dispatch]:
         if re.search(pat, text, re.IGNORECASE):
             return Dispatch(Verdict.COST_COMPILER, "high",
                             f"rule:{name}", f"matched {pat!r}")
+    # Revenue invoice to a person — only when it's NOT a trip/reimbursement.
+    if not _NOT_INVOICE_DRAFT.search(text):
+        for pat, name in _INVOICE_DRAFT_PATTERNS:
+            if re.search(pat, text, re.IGNORECASE):
+                return Dispatch(Verdict.INVOICE_DRAFT, "high",
+                                f"rule:{name}", f"matched {pat!r}")
     for pat, name in _EVAL_FEEDBACK_PATTERNS:
         if re.search(pat, text, re.IGNORECASE):
             return Dispatch(Verdict.EVAL_FEEDBACK, "high",
@@ -169,6 +190,14 @@ Verdict catalog:
       invoice for a specific customer trip. Triggers usually mention:
       a customer name, dates or a month, the word "trip"/"receipts"/
       "expenses", and intent to bill someone.
+
+  INVOICE_DRAFT   (case a)
+      Operator wants to send a REVENUE invoice to a named PERSON for a
+      specific amount, e.g. "send an invoice to Gregory over 1500 for a
+      keynote" or "send <name> an invoice over <amount>". There is an
+      amount and a recipient, and it is NOT about a trip / receipts /
+      reimbursement (that is COST_COMPILER). The daemon drafts the
+      invoice UNSENT and asks the operator to approve before sending.
 
   EVAL_FEEDBACK   (case a)
       Operator is correcting an AI-applied label. Triggers usually
@@ -248,7 +277,7 @@ DECISION RULES (apply in order):
      default to GENERAL_QUERY.
 
 Return ONE JSON object exactly:
-  {"verdict": "COST_COMPILER"|"EVAL_FEEDBACK"|"GENERAL_QUERY"|"AD_HOC_CAPABLE"|"WORKFLOW_SUGGESTION"|"IGNORE",
+  {"verdict": "COST_COMPILER"|"INVOICE_DRAFT"|"EVAL_FEEDBACK"|"GENERAL_QUERY"|"AD_HOC_CAPABLE"|"WORKFLOW_SUGGESTION"|"IGNORE",
    "confidence": "high"|"medium"|"low",
    "reason": "one short sentence — why this verdict"}
 

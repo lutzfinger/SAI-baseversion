@@ -367,3 +367,77 @@ class QBClient:
         if resp.status_code not in (200, 201):
             raise RuntimeError(f"QB update Invoice failed: {resp.status_code}\n{resp.text}")
         return resp.json().get("Invoice") or resp.json()
+
+    # --- Customer create (for the headless invoice-draft flow) ---
+    def create_customer(
+        self, display_name: str, email: Optional[str] = None,
+        first: Optional[str] = None, last: Optional[str] = None,
+    ) -> dict:
+        """Create a QBO Customer. Used by the invoice-draft email flow when
+        the resolved person is not yet a customer."""
+        obj: dict[str, Any] = {"DisplayName": display_name}
+        if email:
+            obj["PrimaryEmailAddr"] = {"Address": email}
+        if first:
+            obj["GivenName"] = first
+        if last:
+            obj["FamilyName"] = last
+        resp = self._request(
+            "POST", f"/v3/company/{self.realm}/customer",
+            params={"minorversion": "75"}, data=json.dumps(obj),
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"QB create Customer failed: {resp.status_code}\n{resp.text}")
+        return resp.json().get("Customer") or resp.json()
+
+    def get_invoice(self, invoice_id: str) -> dict:
+        resp = self._request(
+            "GET", f"/v3/company/{self.realm}/invoice/{invoice_id}",
+            params={"minorversion": "75"},
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"QB get Invoice failed: {resp.status_code}\n{resp.text}")
+        return resp.json().get("Invoice") or resp.json()
+
+    def send_invoice(
+        self, invoice_id: str, to_email: str, cc_email: Optional[str] = None,
+    ) -> dict:
+        """Email an existing (unsent) invoice via QBO SendInvoice.
+
+        CC is NOT a send-param in QBO: it must live on the invoice's
+        BillEmailCc. So this is a 3-call sequence — fetch (SyncToken),
+        sparse-update BillEmail (+ BillEmailCc), then POST /send?sendTo=.
+        The send happens ONLY here, called from the approve path; never on
+        draft creation (PRINCIPLES #2/#7a — gated by the operator's reply).
+        """
+        inv = self.get_invoice(invoice_id)
+        sync = str(inv.get("SyncToken", "0"))
+        update: dict[str, Any] = {
+            "Id": str(invoice_id), "SyncToken": sync,
+            "BillEmail": {"Address": to_email},
+        }
+        if cc_email:
+            update["BillEmailCc"] = {"Address": cc_email}
+        self.update_invoice(update)
+        resp = self._request(
+            "POST", f"/v3/company/{self.realm}/invoice/{invoice_id}/send",
+            params={"minorversion": "75", "sendTo": to_email},
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"QB send Invoice failed: {resp.status_code}\n{resp.text}")
+        return resp.json().get("Invoice") or resp.json()
+
+    def delete_invoice(self, invoice_id: str, sync_token: Optional[str] = None) -> dict:
+        """Hard-delete an unsent invoice (the reject path). Fetches the
+        SyncToken first if not supplied."""
+        if sync_token is None:
+            sync_token = str(self.get_invoice(invoice_id).get("SyncToken", "0"))
+        body = {"Id": str(invoice_id), "SyncToken": str(sync_token)}
+        resp = self._request(
+            "POST", f"/v3/company/{self.realm}/invoice",
+            params={"minorversion": "75", "operation": "delete"},
+            data=json.dumps(body),
+        )
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(f"QB delete Invoice failed: {resp.status_code}\n{resp.text}")
+        return resp.json()

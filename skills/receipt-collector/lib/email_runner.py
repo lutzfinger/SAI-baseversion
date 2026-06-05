@@ -478,6 +478,23 @@ def _poll_new_triggers(
             seen_message_ids.add(msg_id)
             continue
 
+        if dispatch.verdict is dispatch_agent.Verdict.INVOICE_DRAFT:
+            print(f"  → invoice_draft (draft UNSENT invoice + ask approval)")
+            from lib import invoice_intent
+            try:
+                invoice_intent.handle_new_invoice_trigger(
+                    svc, overlay, msg, subject, body)
+            except Exception as e:  # noqa: BLE001
+                print(f"  invoice_draft error: {e!r}")
+                try:
+                    send_reply(overlay, msg,
+                               f"I hit an error drafting that invoice ({e}). "
+                               "Nothing was created or sent.")
+                except Exception:
+                    pass
+            seen_message_ids.add(msg_id)
+            continue
+
         # Otherwise: COST_COMPILER — open an intent + invoke the agent
         # (the existing flow).
         intent = email_intents.open_intent(
@@ -576,6 +593,13 @@ def _route_reply(svc, overlay: dict, intent, original_msg: dict, reply_text: str
     from lib import email_intents, approval, email_format
 
     email_intents.append_operator_message(intent, reply_text)
+
+    # Invoice-draft branch — approve sends, reject deletes. Must precede the
+    # cost_compiler AWAITING_APPROVAL block (which assumes staged_plan_path).
+    if intent.intent_kind == "invoice":
+        from lib import invoice_intent
+        invoice_intent.handle_invoice_reply(svc, overlay, intent, original_msg, reply_text)
+        return
 
     # Case (c) AD_HOC branch — its own approve/reject path; the
     # existing AWAITING_APPROVAL block below is cost_compiler-specific
