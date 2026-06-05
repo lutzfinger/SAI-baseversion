@@ -364,3 +364,52 @@ def test_run_once_per_day_cap():
                               distance_connector=runner._StubConnector({"Berkeley": 80}), safety_reviewer=_safe,
                               ws_opener=lambda u, g: runner._CaptureWS(), send_enabled=True)
     assert res.skipped_reason and res.outcomes == []
+
+
+# ─── A1: live-calendar wiring (PolicyStore import bug fixed) ──────────
+
+def _patch_calendar(monkeypatch, *, loader_raises=False, events=None):
+    import types
+    monkeypatch.setattr("app.shared.config.get_settings",
+                        lambda: types.SimpleNamespace(policies_dir="/tmp/policies"))
+
+    class _Store:
+        def __init__(self, root):
+            pass
+
+        def load(self, ref):
+            if loader_raises:
+                raise FileNotFoundError(f"no calendar policy: {ref}")
+            return object()
+
+    monkeypatch.setattr("app.control_plane.loaders.PolicyStore", _Store)
+    monkeypatch.setattr("app.connectors.calendar_auth.CalendarOAuthAuthenticator",
+                        lambda **kw: object())
+
+    class _Conn:
+        def __init__(self, **kw):
+            pass
+
+        def list_events_on_date(self, date_str, tz_offset="-07:00"):
+            return events if events is not None else []
+
+    monkeypatch.setattr("app.connectors.calendar.CalendarHistoryConnector", _Conn)
+
+
+def test_calendar_live_builds_events(monkeypatch):
+    _patch_calendar(monkeypatch, events=[_ev(loc="Berkeley, CA", summary="esade", start="2026-06-03T13:00")])
+    out = runner._live_calendar_events("2026-06-03", {})
+    assert out and out[0]["location"] == "Berkeley, CA"  # import fixed, objects built
+
+
+def test_calendar_live_fails_closed_on_policy_error(monkeypatch):
+    _patch_calendar(monkeypatch, loader_raises=True)
+    with pytest.raises(Exception):  # caller (read_context) turns this into needs-human
+        runner._live_calendar_events("2026-06-03", {})
+
+
+@pytest.mark.skipif(__import__("os").environ.get("SAI_LIVE_CALENDAR") != "1",
+                    reason="live calendar smoke (gated): set SAI_LIVE_CALENDAR=1")
+def test_calendar_live_smoke():
+    out = runner._live_calendar_events("2026-06-03", {})
+    assert isinstance(out, list)  # real headless read returned, no interactive prompt
