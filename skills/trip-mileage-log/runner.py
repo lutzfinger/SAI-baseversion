@@ -269,16 +269,21 @@ def _live_sheet_read(config: dict, date_str: str):
 
 def _live_calendar_events(date_str: str, config: dict) -> list[dict]:
     """Read the day's events through the Calendar connector (connector-isolation:
-    no Google SDK in this skill). Fail-closed if auth/policy aren't wired."""
+    no Google SDK in this skill). Headless against the non-interactive
+    ~/.SAI/calendar_token.json; fail-closed (never opens a browser) if the policy
+    or token is missing/expired — the caller turns that into a needs-human reply."""
     from app.shared.config import get_settings  # noqa
-    from app.control_plane.loaders import load_policy_document  # noqa
+    from app.control_plane.loaders import PolicyStore  # noqa
     from app.connectors.calendar import CalendarHistoryConnector  # noqa
     from app.connectors.calendar_auth import CalendarOAuthAuthenticator  # noqa
     settings = get_settings()
-    policy = load_policy_document("meeting_decision")
+    # A policy that declares the calendar READ scope (the meeting workflow's policy
+    # does); overridable via config for a different deployment.
+    policy_ref = config.get("calendar_policy_ref", "meeting_decision.yaml")
+    policy = PolicyStore(settings.policies_dir).load(policy_ref)
     auth = CalendarOAuthAuthenticator(settings=settings, policy=policy)
     conn = CalendarHistoryConnector(authenticator=auth)
-    return conn.list_events_on_date(date_str, tz_offset="-07:00")
+    return conn.list_events_on_date(date_str, tz_offset=config.get("tz_offset", "-07:00"))
 
 
 # ─── distance auto-resolve (composes the Ship-1 connector) ──────────────
