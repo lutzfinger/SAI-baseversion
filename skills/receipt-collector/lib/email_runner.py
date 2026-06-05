@@ -386,10 +386,13 @@ def _poll_new_triggers(
             continue
 
         if dispatch.verdict is dispatch_agent.Verdict.EVAL_FEEDBACK:
+            # Log only. The SAI tagger/dispatcher (apply_operator_tag_error_floor ->
+            # tag_error_execution) now OWNS the operator-facing reply for label
+            # corrections (it re-tags the original + writes the eval row + replies with
+            # what it did). The daemon must NOT also reply here, or the operator gets two
+            # replies per correction. (2026-06-05 consolidation: one responder per command.)
             dispatch_agent.log_eval_feedback(thread_id, msg_id, subject, body)
-            reply_text = email_format.eval_acknowledged()
-            send_reply(overlay, msg, reply_text)
-            print(f"  → eval_feedback_inbox.jsonl + acknowledgment sent")
+            print(f"  → eval_feedback_inbox.jsonl (reply owned by SAI tag_error dispatch)")
             seen_message_ids.add(msg_id)
             continue
 
