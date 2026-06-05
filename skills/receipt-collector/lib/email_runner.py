@@ -193,6 +193,22 @@ def _header(msg: dict, name: str) -> str:
     return ""
 
 
+def _is_operator_sender(sender: str, operator_email: str,
+                        trigger_address: str = "") -> bool:
+    """Does this From belong to the operator?
+
+    The daemon's OWN messages are excluded at the call site by the X-SAI-Bot
+    header (and bot_sent_message_ids), NOT by address - because the operator's
+    `sai@` alias and the daemon both send from `sai@`. This is the operator
+    allowlist, widened to include the `sai@` trigger alias, so a reply sent from
+    EITHER the operator's primary (hello@) OR their sai@ alias is recognized.
+    Identification is therefore header-first; address is only the allowlist.
+    """
+    s = (sender or "").lower()
+    return bool((operator_email and operator_email.lower() in s)
+                or (trigger_address and trigger_address.lower() in s))
+
+
 def send_reply(overlay: dict, original_msg: dict, body: str,
                attachments: Optional[list[Path]] = None) -> str:
     """Send an email reply on the same thread as `original_msg`.
@@ -528,6 +544,7 @@ def _poll_open_intent_replies(
     """
     from lib import email_intents
 
+    trigger_address = (overlay.get("email") or {}).get("trigger_address") or ""
     open_map = email_intents.open_threads()
     if not open_map:
         return
@@ -558,9 +575,11 @@ def _poll_open_intent_replies(
             if m["id"] in processed_op_ids:
                 continue  # operator msg we already routed (durable)
             if _header(m, "X-SAI-Bot"):
-                continue  # fingerprint says it's ours
-            sender = _header(m, "From").lower()
-            if operator_email.lower() in sender:
+                continue  # fingerprint says it's ours (header-first self-check)
+            # Operator reply = not-ours (above) AND from one of the operator's
+            # addresses (primary OR the sai@ alias). Without the alias, a reply
+            # the operator's client sent from sai@ was silently ignored.
+            if _is_operator_sender(_header(m, "From"), operator_email, trigger_address):
                 latest_op_msg = m
         if not latest_op_msg:
             for m in messages:
