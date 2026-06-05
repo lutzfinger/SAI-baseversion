@@ -22,6 +22,10 @@ identity:
     distance, an implausible (>max_local_miles) loop, a non-safe safety verdict,
     or an already-filled row without confirmed overwrite.
 
+provenance:
+  designer_surface: claude_code
+  designed_at: "2026-06-04T00:00:00Z"
+
 trigger:
   kind: email_pattern
   config:
