@@ -39,6 +39,13 @@ class ToolPromptRequirement(StrEnum):
 class ToolApprovalBehavior(StrEnum):
     ALWAYS_DENIED = "always_denied"
     APPROVAL_SUPPORTED = "approval_supported"
+    # v17 (2026-05-26): for read-only / informational tools where approval
+    # is structurally not applicable (e.g. local SQLite reads, in-process
+    # helpers). Distinct from ALWAYS_DENIED -- these tools don't write
+    # external state and shouldn't surface in approval UIs at all.
+    NOT_REQUIRED = "not_required"
+    # 2026-05-28: pre-approved at skill sign-off; policy gate still runs.
+    PREAPPROVED_PER_SKILL_SIGNOFF = "preapproved_per_skill_signoff"
 
 
 class ToolDataSensitivity(StrEnum):

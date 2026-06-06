@@ -124,7 +124,13 @@ def test_infer_course_filters_inactive_when_requested(tmp_path, monkeypatch):
         term_start="2024-01-01",
         term_end="2024-05-01",
     )
-    active = _good_course("NOW101", identifiers=["NOW101"])
+    # Active course: a term window that always includes today. (Fixed default fixture
+    # dates go stale as real time advances; is_active_today compares against today.)
+    active = _good_course(
+        "NOW101", identifiers=["NOW101"],
+        term_start=str(date.today() - timedelta(days=30)),
+        term_end=str(date.today() + timedelta(days=30)),
+    )
     _swap(tmp_path, monkeypatch, {"courses": [inactive, active]})
     text = "Asking about OLD101 and NOW101 both."
     matches_active_only = courses.infer_course_from_text(text, only_active=True)
