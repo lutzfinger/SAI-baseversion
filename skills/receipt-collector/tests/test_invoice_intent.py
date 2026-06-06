@@ -145,7 +145,7 @@ def test_turn1_bad_amount_fails_closed(tmp_state):
     out = invoice_intent.handle_new_invoice_trigger(
         _greg_inbox(), {"email": {"operator_email": "hello@lutzfinger.com"}},
         {"id": "m1", "threadId": "t1"},
-        "send gregory an invoice over 5k", "", qb=qb, send_reply=send_reply)
+        "send gregory an invoice over five thousand", "", qb=qb, send_reply=send_reply)
     assert out["status"] == "parse_failed"
     assert "create_invoice" not in qb.names()
     assert email_intents.load("t1") is None
