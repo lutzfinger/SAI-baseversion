@@ -1,0 +1,104 @@
+schema_version: "1"
+
+identity:
+  workflow_id: fuzzy-name-count
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Atomic SAI skill. Counts fuzzy first-name mentions of a person list
+    inside a directory of transcripts. Handles parenthetical aliases
+    ("Elizabeth (Liz) Chen"), length-aware fuzzy thresholds (short
+    names need exact match), speaker filtering (count only most-talked
+    speaker or any speaker), and multiple Granola formats (Speaker A/B,
+    Me/Them, Host/Guest, Interviewer/Interviewee). Outputs a Name ×
+    Session count CSV. Reusable for any speaker-attribution task.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "python -m skills.fuzzy-name-count.runner count ..."
+
+cascade:
+  - tier_id: load_transcripts
+    kind: rules
+    config:
+      transcript_shape: "json file per meeting; transcript field = string or [{speaker,text}]"
+      skip_if_null: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: build_aliases
+    kind: rules
+    config:
+      alias_notation: "parenthetical or quoted alongside primary name"
+      strip_titles: ["Mr.", "Ms.", "Mrs.", "Dr.", "Prof."]
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: identify_target_speaker
+    kind: rules
+    config:
+      named_speaker_hints_default: ["lutz", "finger", "professor", "instructor"]
+      anonymous_fallback: most_words_spoken
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: count_callouts
+    kind: rules
+    config:
+      base_threshold: 85
+      short_name_protection:
+        len_le_3: exact_only
+        len_4_to_5: 90
+        len_ge_6: base_threshold
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: emit_csv
+    kind: rules
+    config:
+      output_shape: "Name + 1 col per transcript (chrono) + Total"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - kind: canaries
+      path: canaries.jsonl
+      min_count: 4
+      fail_mode: hard_fail
+    - kind: edge_cases
+      path: edge_cases.jsonl
+      min_count: 5
+      cap: 50
+      metric: accuracy
+      max_p_r_drop: 0.10
+      fail_mode: soft_fail
+    - kind: workflow
+      path: workflow_regression.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+
+feedback:
+  channel: sai-eval
+  patterns:
+    - add_rule
+    - eval_add
+
+outputs:
+  - name: count_matrix_csv
+    side_effect: none           # local-only file write
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 500
+  audit_log_path: "~/Library/Logs/SAI/fuzzy-name-count.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true
