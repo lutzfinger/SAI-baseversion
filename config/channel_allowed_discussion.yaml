@@ -56,6 +56,24 @@ channels:
           - archive_thread
         description: "Operator ✅/❌ on a staged cornell-delay-triage reply proposal. High risk: approval triggers an outbound email."
 
+  # Synthetic channel name for a 1-on-1 DM between the SAI bot and the
+  # configured operator (SAI_OPERATOR_USER_ID). The bot's
+  # _resolve_channel_name() returns "_dm_operator" for DMs where the
+  # partner matches the operator user_id; any other DM resolves to None
+  # (silently refused per #16i fail-closed default). This is the
+  # COMMAND channel — operator tells SAI to DO things here. Eval
+  # feedback ("rule add", LLM example corrections) belongs in sai-eval,
+  # NOT here.
+  _dm_operator:
+    description: "1-on-1 DM with the configured operator. Command surface — operator triggers skills here CONVERSATIONALLY (PRINCIPLES.md §16f agent execution plane). Identity-bound by definition (DMs are 1-on-1 with the bot, partner == SAI_OPERATOR_USER_ID enforced in _resolve_channel_name)."
+    allowed_topics:
+      - kind: skill_run_invocation
+        risk_class: high
+        tools:
+          - list_available_skills      # read_only — agent inspects what skills exist
+          - propose_skill_run           # propose_only — stages YAML for ✅
+        description: "Operator describes what they want in natural language (e.g. 'check student participation for the C-Suites class, sheet https://...'). The DM agent (app/agents/sai_operator_dm_agent.py) reads intent via cloud LLM (claude-haiku-4-5 per #24b agent_default role), asks clarifying questions if params are missing, and on confirmed intent calls `propose_skill_run` which invokes the skill cascade. The cascade's final `human` tier stages a YAML proposal at ~/.sai-runtime/eval/proposed/<workflow_id>/<thread_id>.yaml. Operator reacts ✅ on the bot's reply message → _dispatch_staged_proposal_reaction → skill_apply_registry → skill's send_tool.apply_approved_proposal fires the actual side effect (Google Sheet write, etc.). Per-skill kill-switch env vars default OFF. Five gates of #9 enforced: channel-bound (synthetic channel only resolves for operator's DM), identity-bound (operator_user_id at message time + DM partner check), pattern-bound (LLM tool schema), two-phase commit (proposal + ✅), hash-aware (overlay merge re-hashes prompt + manifest). Follow-up: add local-LLM Tier-1 (Ollama qwen2.5:7b) with cloud as Tier-2 fallback per #12 cascade; hash-lock the agent's system prompt per #24c; ship canaries per #16d every workflow same shape."
+
   # PLACEHOLDER — will host the sai-cost dashboard agent. Reserved
   # NOW so adding it later is just enabling, not designing-from-scratch.
   sai-cost:
