@@ -1,0 +1,308 @@
+schema_version: "1"
+
+identity:
+  workflow_id: receipt-collector
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Collect business-trip travel receipts from multiple sources (Calendar,
+    Gmail, QuickBooks credit-card registers, QuickBooks Receipts inbox) and
+    assemble a customer reimbursement invoice in QuickBooks Online. Atomic
+    deterministic tiers with operator approval at: trip window, customer
+    match, full invoice review before sending. No LLM in the hot path. See
+    README.md for source breakdown, output detail, and architecture notes.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "python -m skills.receipt-collector.runner <subcommand> [flags]"
+
+cascade:
+  - tier_id: parse_trigger
+    kind: rules
+    config:
+      input: ["email_subject_or_slack_text"]
+      output: "{trip_slug, customer_hint, requested_receipt_categories}"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: infer_trip_window
+    kind: rules
+    config:
+      input: ["calendar_id", "hint", "search_start", "search_end"]
+      output: "{start_date, end_date, supporting_events[]}"
+    confidence_threshold: 0.9
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: confirm_trip_window
+    kind: human
+    config:
+      gate: approval
+      output_artifact: "Claude-Logs/receipt-collector/<trip_slug>/dates.md"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: infer_customer
+    kind: rules
+    config:
+      input: ["calendar_events", "customer_hint"]
+      output: "{customer_qb_id, customer_name, currency}"
+      notes: "Match calendar attendees' email domains against QB customers; require operator confirmation."
+    confidence_threshold: 0.85
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: search_email_receipts
+    kind: rules
+    config:
+      input: ["start_date", "end_date", "vendor_sender_list"]
+      output: "list of {sender, subject, thread_id, snippet, amounts_found}"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: scan_credit_card_registers
+    kind: rules
+    config:
+      input: ["start_date", "end_date", "payment_account_ids[]"]
+      output: "list of {date, vendor, amount, currency, account_name, qb_purchase_id}"
+      notes: "Iterates EVERY payment account in the overlay; no card is silently skipped."
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: extract_amounts
+    kind: rules
+    config:
+      input: ["receipt_thread"]
+      output: "{total, currency, line_items_optional, placeholder_flag}"
+      notes: "Plain-text body regex first. Image-only attachments emit a PLACEHOLDER flag for operator-verify."
+    confidence_threshold: 0.95
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: match_to_receipts_list
+    kind: rules
+    config:
+      input: ["found_receipts[]", "operator_requested_categories[]"]
+      output: "{matched[], unmatched[], extras_for_operator_review[]}"
+      notes: "extras_for_operator_review surfaces anything during the trip window the operator didn't explicitly ask about."
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: create_purchases
+    kind: rules
+    config:
+      input: ["matched_receipts[]", "vendor_map", "account_map", "payment_account"]
+      output: "list of qb_purchase_ids"
+      idempotency: "PrivateNote contains [sai-receipts:<trip_slug>] <name> marker"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: build_customer_invoice
+    kind: rules
+    config:
+      input: ["created_purchases[]", "customer_currency", "fx_rate", "item_map"]
+      output: "invoice_object (not yet posted)"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: create_invoice
+    kind: rules
+    config:
+      input: ["invoice_object"]
+      output: "qb_invoice_id"
+      idempotency: "PrivateNote contains [sai-invoice:<trip_slug>] marker"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: present_review
+    kind: rules
+    config:
+      output_artifact: "Claude-Logs/receipt-collector/<trip_slug>/final-review.md"
+      contents: "Purchase IDs, Invoice ID, placeholder amounts to verify, receipt photo refs, payment-account coverage report"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: tag_purchases_for_customer
+    kind: rules
+    config:
+      input: ["trip_slug", "customer_name", "date_window", "exclude_ids[]"]
+      output: "{updated_ids[], skipped_ids[], failed_ids[], manual_tag_report}"
+      notes: |
+        QB v3 API has no public Tag write endpoint, so this tier writes the
+        "Billed as expenses to <customer>" memo line on every matching
+        Purchase and PRINTS the list of Purchase IDs for the operator to
+        paste the tag into the QB UI. Idempotent: re-runs skip purchases
+        already memo-flagged.
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: match_receipts_to_purchases
+    kind: rules
+    config:
+      input: ["trip_slug", "customer_name", "date_window"]
+      output_artifact: "<out-root>/sai-receipts-<trip_slug>/{index.md, purchase-<id>/<thread_id>/{body.txt,body.html}, purchase-<id>/<date>-purchase-<id>-<vendor>-<thread_short>.pdf}"
+      output: "{rows: [{purchase_id, threads[], qb_attachable_ids[], receipt_status}], summary}"
+      side_effects:
+        - "writes PDFs to disk under <out-root>"
+        - "POSTs each PDF to QB /v3/company/<realm>/upload as an Attachable, linked to the matching Purchase"
+        - "PrivateNote on each Purchase already carries 'Billed as expenses to <customer>' from tier tag_purchases_for_customer"
+      notes: |
+        Per-Purchase pipeline. For each Purchase carrying the trip marker:
+          1. Derive a precise Gmail query from its line description
+             (confirmation numbers for airlines, "ride with <driver>" for
+             Lyft, date+vendor for Uber).
+          2. Download every matching thread (body.txt + body.html) under
+             <out-root>/sai-receipts-<trip>/purchase-<id>/<thread_id>/.
+          3. Render the thread's text body to a PDF via fpdf2 (pure Python).
+          4. Upload the PDF to QB as an Attachable linked to that Purchase.
+             Idempotent: re-runs find an existing Attachable with our marker
+             and skip re-upload.
+        Vendors paid on site (taxi, hotel front desk) get
+        receipt_status="no_email_receipt_expected" — the operator attaches
+        a photo manually. The Tags column in QB still requires a UI step;
+        the v3 REST API has no Tag write endpoint, so tag_purchases_for_customer
+        prints a paste-ready list instead.
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: download_receipts_to_disk
+    kind: rules
+    config:
+      input: ["trip_slug", "date_window", "gmail_senders[]"]
+      output_artifact: "~/Downloads/sai-receipts-<trip_slug>/<thread_id>/{body.txt, subject.txt, attachments...}"
+      output: "{thread_count, manifest.json}"
+      notes: |
+        Used after the operator confirms which items are billable but can't
+        be auto-billed via the QB API (e.g., on Essentials tier). Saves
+        every receipt thread body + every attachment to disk so the
+        operator can attach them to the customer-facing reimbursement
+        package.
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: capture_bookkeeping_rules
+    kind: human
+    config:
+      gate: optional_input
+      output_artifact: "overlay/bookkeeping-rules.md"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: sense_check_trip
+    kind: rules+llm
+    config:
+      input: ["trip_slug", "customer", "trip_start", "trip_end"]
+      output: "list of {purchase_id, verdict (YES|MAYBE|NO), source, reason}"
+      model_default: "llama3.2:1b"
+      side_effects:
+        - "appends one audit row per check to ~/Library/Logs/SAI/receipt-collector.jsonl"
+      notes: |
+        Final gate before invoice creation. Cross-checks every
+        Purchase tagged for the trip against the declared trip window.
+        Deterministic gate (free) handles the obvious cases; local LLM
+        gate (Ollama, sub-second, fully local) only fires on MAYBE.
+        Exit code 2 = at least one NO; 1 = at least one MAYBE; 0 = clear.
+        The local-LLM-first principle from workflow.md applies here —
+        this tier never calls a paid model.
+    confidence_threshold: 0.9
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: scan_google_photos
+    kind: rules
+    config:
+      input: ["account_label", "date_window"]
+      output: "list of mediaItems + downloaded files"
+      notes: |
+        Search a Google Photos library belonging to one of the operator's
+        labeled accounts (e.g., 'personal' / 'work' label).
+        Subject to Google's March-2025 partner-only restriction — may
+        return empty/403; the runner falls back to attach_onsite_photos
+        (Gmail forwards) in that case.
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: extract_receipt_amounts
+    kind: llm
+    config:
+      input: ["image_path", "model"]
+      output: "{total, currency, date_iso, vendor, line_items[], confidence, notes, cost_usd}"
+      model_default: "claude-haiku-4-5"
+      notes: |
+        Vision-OCR via Claude Haiku 4.5 (cheapest vision-capable tier).
+        Advisory only — never auto-writes to QB. Each call appended to
+        ~/Library/Logs/SAI/llm_costs.jsonl with tokens + USD cost.
+        Local-LLM-first escalation is a planned gap (see workflow.md).
+    confidence_threshold: 0.8
+    cost_cap_per_call_usd: 0.02
+
+  - tier_id: cleanup_pass
+    kind: rules
+    config:
+      mode: deferred
+      input: ["bookkeeping-rules.md", "qb_purchases_in_window"]
+      output: "list of {purchase_id, rule_applied, change_made_or_flagged}"
+    confidence_threshold: 0.95
+    cost_cap_per_call_usd: 0.0
+
+tools:
+  - quickbooks_online_api
+  - gmail_api
+  - google_calendar_api
+  - 1password_cli
+
+eval:
+  datasets:
+    - kind: canaries
+      path: canaries.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+    - kind: edge_cases
+      path: edge_cases.jsonl
+      min_count: 4
+      cap: 50
+      metric: accuracy
+      max_p_r_drop: 0.10
+      fail_mode: soft_fail
+    - kind: workflow
+      path: workflow_regression.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+
+feedback:
+  channel: sai-eval
+  patterns:
+    - add_rule
+    - eval_add
+
+outputs:
+  - name: qb_purchases_created
+    side_effect: external_write
+    requires_approval: true
+  - name: qb_invoice_created
+    side_effect: external_write
+    requires_approval: true
+  - name: logfile_appended
+    side_effect: file_write
+    requires_approval: false
+  - name: bookkeeping_rules_appended
+    side_effect: file_write
+    requires_approval: false
+
+policy:
+  approval_required: true
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 10
+  audit_log_path: "~/Library/Logs/SAI/receipt-collector.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true
+
+auth_preconditions:
+  - "1Password CLI (`op`) installed and signed in. The overlay names which item holds the QB OAuth creds."
+  - "Google OAuth (Calendar + Gmail) at ~/.SAI/credentials.json (shared with other SAI skills)."
+
+overlay_required:
+  - "config/identity.yaml: customer mapping, payment-account IDs, vendor IDs, item IDs, FX rate defaults."
+  - "config/1password-refs.yaml: pointers to OP items holding QB OAuth creds."
+  - "bookkeeping-rules.md: persistent accounting rules captured across runs."
+  - "trip_runs/<slug>/: per-trip artifacts (dates.md, receipts.csv, final-review.md, run.log)."
