@@ -60,6 +60,27 @@ from pathlib import Path
 from typing import Optional
 
 
+def _invoice_tool_active() -> bool:
+    """True when the SAI dispatcher's invoice executor tool owns invoices (Stage 2
+    cutover), so this daemon YIELDS invoice handling (one responder per command).
+    Single toggle: ``SAI_INVOICE_TOOL`` in the process env OR in
+    ``~/.config/sai/runtime.env`` (which the tagger also sources). Default OFF ->
+    the daemon owns invoices exactly as before. Reversible by removing the flag."""
+    truthy = {"1", "true", "on", "yes"}
+    if os.environ.get("SAI_INVOICE_TOOL", "").strip().lower() in truthy:
+        return True
+    try:
+        runtime_env = Path(os.path.expanduser("~/.config/sai/runtime.env"))
+        for line in runtime_env.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if s.startswith("SAI_INVOICE_TOOL"):
+                val = s.split("=", 1)[1].strip().strip('"').strip("'").lower()
+                return val in truthy
+    except Exception:  # noqa: BLE001 — missing/unreadable runtime.env -> daemon keeps invoices
+        pass
+    return False
+
+
 GMAIL_SEND_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
@@ -490,6 +511,10 @@ def _poll_new_triggers(
             continue
 
         if dispatch.verdict is dispatch_agent.Verdict.INVOICE_DRAFT:
+            if _invoice_tool_active():
+                print("  → invoice_draft YIELDED to the SAI dispatcher invoice tool (SAI_INVOICE_TOOL)")
+                seen_message_ids.add(msg_id)
+                continue
             print(f"  → invoice_draft (draft UNSENT invoice + ask approval)")
             from lib import invoice_intent
             try:
@@ -611,6 +636,9 @@ def _route_reply(svc, overlay: dict, intent, original_msg: dict, reply_text: str
     # Invoice-draft branch — approve sends, reject deletes. Must precede the
     # cost_compiler AWAITING_APPROVAL block (which assumes staged_plan_path).
     if intent.intent_kind == "invoice":
+        if _invoice_tool_active():
+            print("  → invoice reply YIELDED to the SAI dispatcher invoice tool (SAI_INVOICE_TOOL)")
+            return
         from lib import invoice_intent
         invoice_intent.handle_invoice_reply(svc, overlay, intent, original_msg, reply_text)
         return
