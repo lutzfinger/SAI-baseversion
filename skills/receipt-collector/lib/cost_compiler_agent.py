@@ -107,6 +107,7 @@ def run_agent(
     qb_client: Optional[QBClient] = None,
     model: Optional[str] = None,
     audit_path: Optional[Path] = None,
+    images: Optional[list[dict]] = None,
 ) -> AgentResult:
     """Run one agent turn over `source_text`. Returns AgentResult.
 
@@ -189,9 +190,26 @@ def run_agent(
 
     # ── tool-use loop ────────────────────────────────────────────────
     chosen_model = model or os.environ.get("SAI_COST_COMPILER_AGENT_MODEL") or DEFAULT_MODEL
-    messages: list[dict] = [
-        {"role": "user", "content": source_text}
-    ]
+    # Receipt photos arrive as image attachments; pass them as vision blocks so the agent
+    # reads amounts/dates/vendors instead of asking the operator to retype them. Without
+    # this the images were dropped and the agent always asked for clarification.
+    messages: list[dict]
+    if images:
+        user_content: list[dict] = [{"type": "text", "text": source_text}]
+        for img in images:
+            user_content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img["media_type"],
+                        "data": img["data"],
+                    },
+                }
+            )
+        messages = [{"role": "user", "content": user_content}]
+    else:
+        messages = [{"role": "user", "content": source_text}]
     iteration = 0
     final_text = ""
     while iteration < MAX_ITERATIONS:

@@ -31,6 +31,11 @@ Before you call `propose_plan` you MUST:
 4. If you reference scope categories (e.g. "just airfare and hotels"),
    call `list_expense_accounts` to verify they exist in this operator's
    overlay before passing them to `propose_plan`.
+5. If the operator's message includes RECEIPT IMAGES (photos/scans of
+   bills, tickets, or receipts), READ the amount(s), date(s), and vendor
+   directly from the image. That is frequently the entire cost. Combine
+   the image amounts with the customer/trip inferred from the text. NEVER
+   ask the operator to retype a figure the attached image already shows.
 
 ## When to ask for clarification instead of proposing
 

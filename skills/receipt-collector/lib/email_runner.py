@@ -207,6 +207,53 @@ def _decode_body(payload: dict) -> str:
     return ""
 
 
+def _extract_image_attachments(
+    svc, msg: dict, *, max_images: int = 6, max_bytes: int = 4_500_000
+) -> list[dict]:
+    """Download receipt IMAGE attachments as Anthropic vision blocks.
+
+    Receipt photos are how operators send costs; without this they were silently dropped
+    (only text/plain was read) and the agent had no amounts, so it always asked for
+    clarification. Bounded (count + size) and fail-soft (a bad attachment never breaks
+    the turn). Returns [{media_type, data(base64)}]."""
+    out: list[dict] = []
+    msg_id = msg.get("id")
+    allowed = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+    def _walk(part: dict) -> None:
+        if len(out) >= max_images or not part:
+            return
+        mime = (part.get("mimeType") or "").lower()
+        body = part.get("body") or {}
+        att_id = body.get("attachmentId")
+        if mime in allowed and att_id and msg_id:
+            try:
+                att = (
+                    svc.users()
+                    .messages()
+                    .attachments()
+                    .get(userId="me", messageId=msg_id, id=att_id)
+                    .execute()
+                )
+                data = att.get("data", "")
+                if data:
+                    raw = base64.urlsafe_b64decode(data.encode())
+                    if 0 < len(raw) <= max_bytes:
+                        out.append(
+                            {
+                                "media_type": mime,
+                                "data": base64.standard_b64encode(raw).decode(),
+                            }
+                        )
+            except Exception as e:  # noqa: BLE001 — a bad attachment must not break the turn
+                print(f"  image attachment download failed (non-fatal): {e!r}")
+        for sub in part.get("parts", []) or []:
+            _walk(sub)
+
+    _walk(msg.get("payload") or {})
+    return out
+
+
 def _header(msg: dict, name: str) -> str:
     for h in (msg.get("payload") or {}).get("headers", []) or []:
         if h.get("name", "").lower() == name.lower():
@@ -825,9 +872,13 @@ def _drive_agent_turn(svc, overlay: dict, intent, original_msg: dict,
         f"── operator's latest message (decide what to do next) ──\n"
         f"{fresh_text}"
     )
+    images = _extract_image_attachments(svc, original_msg)
+    if images:
+        print(f"  cost_compiler: {len(images)} receipt image(s) attached -> vision")
     result = cost_compiler_agent.run_agent(
         source_text=agent_input,
         overlay=overlay,
+        images=images or None,
     )
     inv = result.invocation
     if inv:
