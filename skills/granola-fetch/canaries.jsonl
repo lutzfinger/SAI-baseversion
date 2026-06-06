@@ -1,0 +1,4 @@
+{"case_id": "canary_save_classroom_format", "input": {"transcript_field": " assemblyai: Speaker A: Hi everyone. Speaker B: Hi."}, "expected": "save"}
+{"case_id": "canary_save_1on1_format", "input": {"transcript_field": " Me: Hello. Them: Hi back."}, "expected": "save"}
+{"case_id": "canary_skip_null_transcript", "input": {"transcript_field": null}, "expected": "skip_no_audio"}
+{"case_id": "canary_skip_empty_transcript", "input": {"transcript_field": ""}, "expected": "skip_no_audio"}

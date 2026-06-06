@@ -1,0 +1,98 @@
+schema_version: "1"
+
+identity:
+  workflow_id: granola-fetch
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Atomic SAI skill. Normalizes Granola MCP tool-result files into
+    SAI-standard `<meeting_id>.json` transcripts in an output directory.
+    The MCP fetch sequence (list folders → fuzzy match → list meetings →
+    fetch transcripts) is agent-orchestrated; this skill's cascade only
+    runs the normalize+save step on the already-saved MCP files. Pairs
+    with `fuzzy-name-count` and `student-participation-check`. See
+    README.md for the full orchestration walkthrough.
+
+trigger:
+  # Granola MCP is only callable from within a Claude/agent conversation,
+  # so this skill is invoked manually by an operator/agent — not a queue
+  # or cron. The agent reads SKILL.md and executes the MCP-call sequence.
+  kind: manual
+  config:
+    invocation: "agent-orchestrated via Granola MCP server"
+
+cascade:
+  - tier_id: folder_match
+    kind: rules
+    config:
+      fuzzy_threshold: 70
+    confidence_threshold: 0.85
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: list_meetings_in_range
+    kind: rules
+    config:
+      sort: chronological_asc
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: fetch_each_transcript
+    kind: rules
+    config:
+      max_inline_chars: 25000
+      skip_null_transcript: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: normalize_and_save
+    kind: rules
+    config:
+      output_shape:
+        meeting_id: string
+        title: string
+        start_time: iso8601
+        transcript: "string|list[{speaker,text}]"
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - kind: canaries
+      path: canaries.jsonl
+      min_count: 4
+      fail_mode: hard_fail
+    - kind: edge_cases
+      path: edge_cases.jsonl
+      min_count: 4
+      cap: 50
+      metric: accuracy
+      max_p_r_drop: 0.10
+      fail_mode: soft_fail
+    - kind: workflow
+      path: workflow_regression.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+
+feedback:
+  channel: sai-eval
+  patterns:
+    - add_rule
+    - eval_add
+
+outputs:
+  - name: transcript_files
+    side_effect: none           # local-only file write; no external side effect
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 200
+  audit_log_path: "~/Library/Logs/SAI/granola-fetch.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true

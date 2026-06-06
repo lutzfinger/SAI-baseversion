@@ -1,0 +1,3 @@
+{"case_id": "wf_two_transcripts_three_names", "input": {"transcript_segments": [{"speaker": "Host", "text": "Sarah! And Mike."}], "names": ["Sarah Smith", "Mike Davis", "Carol Lee"]}, "expected": {"counts": [1, 1, 0]}}
+{"case_id": "wf_titles_and_lastname_first_form", "input": {"transcript_segments": [{"speaker": "Host", "text": "Welcome Robert."}], "names": ["Dr. Robert (Bob) Smith", "Johnson, Sarah"]}, "expected": {"counts": [1, 0]}}
+{"case_id": "wf_granola_classroom_format_inline", "input": {"transcript_segments": [{"speaker": "Speaker A", "text": "Sarah, please present. Mike, follow up."}, {"speaker": "Speaker B", "text": "Hi everyone."}], "names": ["Sarah Smith", "Mike Davis"]}, "expected": {"counts": [1, 1]}}

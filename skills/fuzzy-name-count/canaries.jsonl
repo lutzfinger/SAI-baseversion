@@ -1,0 +1,4 @@
+{"case_id": "canary_basic_exact_match", "input": {"transcript_segments": [{"speaker": "Host", "text": "Sarah, what do you think? Mike, your turn."}], "names": ["Sarah Smith", "Mike Davis"]}, "expected": {"counts": [1, 1]}}
+{"case_id": "canary_parenthetical_alias_resolves", "input": {"transcript_segments": [{"speaker": "Host", "text": "Liz, please go ahead."}], "names": ["Elizabeth (Liz) Chen"]}, "expected": {"counts": [1]}}
+{"case_id": "canary_short_name_no_false_positive", "input": {"transcript_segments": [{"speaker": "Host", "text": "Tell me about the same thing again."}], "names": ["Samer Ali"]}, "expected": {"counts": [0]}}
+{"case_id": "canary_only_top_speaker_counted", "input": {"transcript_segments": [{"speaker": "Host", "text": "Welcome Sarah. Sarah, here is your question. Sarah, please answer."}, {"speaker": "Guest", "text": "I would also like to say Sarah."}], "names": ["Sarah Smith"]}, "expected": {"counts": [3]}}

@@ -1,0 +1,5 @@
+{"case_id": "edge_short_inline_transcript", "input": {"transcript_field": " Me: ok."}, "expected": "save", "note": "Tiny but non-empty transcripts (sub-50-char Sunday-test recordings) must still save."}
+{"case_id": "edge_podcast_format", "input": {"transcript_field": " Host: Welcome. Guest: Thanks."}, "expected": "save", "note": "Granola can emit Host/Guest labels for podcast-style sessions."}
+{"case_id": "edge_whitespace_only_transcript", "input": {"transcript_field": "   \n  \t  "}, "expected": "save", "note": "Whitespace-only — we still save the file; downstream parser will warn 'zero segments'."}
+{"case_id": "edge_interview_format", "input": {"transcript_field": " Interviewer: Tell me about X. Interviewee: Sure."}, "expected": "save", "note": "Interview-style labels must save just like classroom format."}
+{"case_id": "edge_anonymized_only_speaker_a", "input": {"transcript_field": " assemblyai: Speaker A: This is a solo recording."}, "expected": "save", "note": "Single-speaker recordings are valid input."}

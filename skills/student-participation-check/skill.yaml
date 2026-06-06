@@ -1,0 +1,120 @@
+schema_version: "1"
+
+identity:
+  workflow_id: student-participation-check
+  version: "0.1.0"
+  owner: framework
+  description: |
+    Composed SAI workflow. Counts how often a course operator called
+    out each student by first name during recorded course sessions in
+    Granola, and writes the counts back to a Google Sheet (one column
+    per session + a Total column). Pipeline: granola-fetch → fuzzy-name-
+    count → sheet append + crosscheck. Course-agnostic — folder name,
+    date range, and sheet URL are invocation parameters; nothing is
+    hard-coded. Deterministic, no LLM, no approval gate.
+
+trigger:
+  kind: manual
+  config:
+    invocation: "python -m skills.student-participation-check.runner ..."
+
+cascade:
+  - tier_id: validate_inputs
+    kind: rules
+    config:
+      requires: ["folder_name", "sheet_url|students_file"]
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  # Reuses granola-fetch's 4 atomic handlers, registered under THIS
+  # workflow_id so the cascade engine routes them correctly. Net effect:
+  # one DM (folder + dates + sheet) drives the full pipeline.
+  - tier_id: granola_fetch
+    kind: rules
+    config:
+      delegates_to: granola-fetch
+      reuses_handlers: [folder_match, list_meetings_in_range, fetch_each_transcript, normalize_and_save]
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: read_roster
+    kind: rules
+    config:
+      source: "google sheet column A (configurable) OR local students_file"
+      header_rows: 1
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: count_callouts
+    kind: rules
+    config:
+      delegates_to: fuzzy-name-count
+      reuses_handlers: [load_transcripts, build_aliases, identify_target_speaker, count_callouts]
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  - tier_id: build_matrix_and_crosscheck
+    kind: rules
+    config:
+      invariant: "new_session_columns == transcripts_loaded"
+      header_format: "session - YYYY-MM-DD"
+      add_total_column: true
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+  # Per PRINCIPLES.md §2 + §9: external mutations stage a proposal for
+  # operator ✅. The actual sheet write fires from `send_tool.py` after
+  # approval — NOT here. The human tier stages a YAML proposal at
+  # ~/.sai-runtime/eval/proposed/student-participation-check/<thread_id>.yaml
+  # carrying the full matrix preview so the operator can review before approving.
+  - tier_id: human
+    kind: human
+    config:
+      channel: sai-eval
+    confidence_threshold: 1.0
+    cost_cap_per_call_usd: 0.0
+
+tools: []
+
+eval:
+  datasets:
+    - kind: canaries
+      path: canaries.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+    - kind: edge_cases
+      path: edge_cases.jsonl
+      min_count: 4
+      cap: 50
+      metric: accuracy
+      max_p_r_drop: 0.10
+      fail_mode: soft_fail
+    - kind: workflow
+      path: workflow_regression.jsonl
+      min_count: 3
+      fail_mode: hard_fail
+
+feedback:
+  channel: sai-eval
+  patterns:
+    - add_rule
+    - eval_add
+
+outputs:
+  - name: sheet_columns_appended
+    side_effect: post           # post to external Google Sheet
+    requires_approval: true     # SAI policy: external mutations gate by default
+  - name: logfile_appended
+    side_effect: none           # local-only file write
+    requires_approval: false
+
+policy:
+  approval_required: false
+  cost_cap_per_invocation_usd: 0.0
+  iteration_cap: 1
+  daily_invocation_cap: 50
+  audit_log_path: "~/Library/Logs/SAI/student-participation-check.jsonl"
+
+observability:
+  langsmith_project: SAI
+  metrics_emit: true
