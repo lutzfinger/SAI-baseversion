@@ -41,9 +41,10 @@ _ACCOUNTS = [
 
 
 class _FakeQB:
-    def __init__(self, customer=True, vendor=True):
+    def __init__(self, customer=True, vendor=True, existing_marker=None):
         self._customer = {"Id": "C1", "DisplayName": "Cornell University"} if customer else None
         self._vendor = {"Id": "V1", "DisplayName": "Tavern on the Commons"} if vendor else None
+        self._existing_marker = existing_marker
         self.created = []
 
     def list_accounts(self, classification=None):
@@ -54,6 +55,9 @@ class _FakeQB:
 
     def find_vendor_by_name(self, name):
         return self._vendor
+
+    def find_purchase_by_marker(self, marker, start, end):
+        return {"Id": "EXISTING-PUR"} if self._existing_marker == marker else None
 
     def create_purchase(self, obj):
         self.created.append(obj)
@@ -112,6 +116,16 @@ def test_live_creates_purchase():
 
 
 # ── fail-closed ───────────────────────────────────────────────────────────────
+
+def test_idempotent_skips_when_marker_already_booked():
+    qb = _FakeQB(existing_marker="[sai-receipt:test]")
+    out = file_single_receipt_expense(
+        extraction=_extraction(), customer_hint="Cornell", qb_client=qb,
+        receipt_path=None, trip_slug="x", marker="[sai-receipt:test]", dry_run=False,
+    )
+    assert out["status"] == "already_booked" and out["purchase_id"] == "EXISTING-PUR"
+    assert qb.created == []  # never double-books
+
 
 def test_fail_closed_when_customer_not_found():
     qb = _FakeQB(customer=False)

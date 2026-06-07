@@ -151,6 +151,20 @@ def file_single_receipt_expense(
         summary["status"] = "would_book"
         return summary
 
+    # IDEMPOTENCY (a financial write must never double-book): if a Purchase carrying this
+    # receipt's marker already exists near its date, reuse it instead of creating a second.
+    try:
+        from datetime import date as _date, timedelta as _td
+
+        day = _date.fromisoformat(extraction.date)
+        existing = qb_client.find_purchase_by_marker(marker, day - _td(days=45), day + _td(days=45))
+    except Exception:  # noqa: BLE001 — no marker lookup -> fall through and create
+        existing = None
+    if existing:
+        summary["status"] = "already_booked"
+        summary["purchase_id"] = existing.get("Id")
+        return summary
+
     result = qb_client.create_purchase(purchase_obj)
     purchase_id = result.get("Id")
     summary["purchase_id"] = purchase_id
