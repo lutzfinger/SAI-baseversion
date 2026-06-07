@@ -14,10 +14,33 @@ writing to QB; set =1 to write for real (mirrors invoice_fwd's dry-run cutover).
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from lib.purchases import build_purchase
+
+# "... for Cornell", "for Cornell University", "for the Acme Corp" -> the customer hint.
+_FOR_CUSTOMER = re.compile(
+    r"\bfor\s+(?:the\s+)?([A-Z][A-Za-z0-9&.\-']*(?:\s+[A-Z][A-Za-z0-9&.\-']*){0,4})"
+)
+
+
+def extract_customer_hint(text: str) -> Optional[str]:
+    """Pull the billable customer from an operator forward like 'cost ... for Cornell'.
+    Returns None when there's no clear 'for <Customer>' phrase (then the trip-compile agent
+    handles it instead of this single-receipt path)."""
+    match = _FOR_CUSTOMER.search(text or "")
+    if not match:
+        return None
+    hint = match.group(1).strip(" .-")
+    return hint or None
+
+
+def build_trip_slug(customer_hint: str | None, date_iso: str | None) -> str:
+    cust = re.sub(r"[^a-z0-9]+", "-", (customer_hint or "expense").lower()).strip("-")
+    year_month = (date_iso or "")[:7]
+    return f"{cust}-{year_month}" if len(year_month) == 7 else (cust or "expense")
 
 
 def expense_live() -> bool:

@@ -12,11 +12,24 @@ if str(_ROOT) not in sys.path:
 
 from lib.single_receipt_expense import (  # noqa: E402
     ReceiptExtraction,
+    build_trip_slug,
+    extract_customer_hint,
     file_single_receipt_expense,
     pick_expense_account,
     pick_payment_account,
     reply_text,
 )
+
+
+def test_extract_customer_hint():
+    assert extract_customer_hint("cost while I was in Ithaca - for Cornell") == "Cornell"
+    assert extract_customer_hint("expenses for Cornell University this trip") == "Cornell University"
+    assert extract_customer_hint("just a normal note, no customer") is None
+
+
+def test_build_trip_slug():
+    assert build_trip_slug("Cornell", "2026-03-01") == "cornell-2026-03"
+    assert build_trip_slug("Cornell University", "2026-03-15") == "cornell-university-2026-03"
 
 _ACCOUNTS = [
     {"Id": "10", "Name": "Checking", "AccountType": "Bank", "Classification": "Asset"},

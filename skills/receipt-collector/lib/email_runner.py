@@ -857,6 +857,67 @@ def _route_ad_hoc_reply(overlay: dict, intent, original_msg: dict,
         return
 
 
+def _try_single_receipt_expense(svc, overlay, intent, original_msg, fresh_text, images) -> bool:
+    """Autonomous single-receipt expense (operator decision 2026-06-06): a receipt photo + a
+    'for <customer>' hint -> file ONE QB expense + attach the receipt (dry-run gated, via
+    SAI_COST_COMPILER_EXPENSE_LIVE), instead of the trip-compile agent asking for dates /
+    currency / scope. FULLY FAIL-SOFT: ANY problem returns False so the caller falls back to
+    the existing agent flow (the daemon never crashes on this path)."""
+    import base64 as _b64
+    import os as _os
+    import tempfile as _tf
+    from pathlib import Path as _Path
+
+    try:
+        from lib import email_intents, single_receipt_expense as sre, vision_extract
+
+        hint = sre.extract_customer_hint(fresh_text)
+        if not hint or not images:
+            return False
+        img = images[0]
+        ext = {
+            "image/jpeg": ".jpg", "image/png": ".png",
+            "image/gif": ".gif", "image/webp": ".webp",
+        }.get(img.get("media_type", ""), ".img")
+        tmp = _tf.NamedTemporaryFile(delete=False, suffix=ext)
+        tmp.write(_b64.standard_b64decode(img["data"]))
+        tmp.close()
+        try:
+            vis = vision_extract.extract_receipt(
+                _Path(tmp.name),
+                overlay=overlay,
+                secret_ref=(overlay.get("secrets") or {}).get("anthropic"),
+            )
+            if vis.total is None or not vis.date_iso:
+                print("  single-receipt: vision missing amount/date -> agent fallback")
+                return False
+            extraction = sre.ReceiptExtraction(
+                amount=float(vis.total), date=vis.date_iso,
+                vendor=vis.vendor or "Unknown vendor", currency=vis.currency or "USD",
+            )
+            trip_slug = sre.build_trip_slug(hint, vis.date_iso)
+            from runner import qb_client_from_overlay  # type: ignore
+
+            summary = sre.file_single_receipt_expense(
+                extraction=extraction, customer_hint=hint,
+                qb_client=qb_client_from_overlay(overlay),
+                receipt_path=tmp.name, trip_slug=trip_slug,
+                marker=f"[sai-receipt:{trip_slug}]",
+            )
+        finally:
+            try:
+                _os.unlink(tmp.name)
+            except OSError:
+                pass
+        print(f"  single-receipt expense: {summary.get('status')} dry_run={summary.get('dry_run')}")
+        _send_and_track(overlay, intent, original_msg, sre.reply_text(summary))
+        email_intents.set_status(intent, email_intents.IntentStatus.COMPLETED)
+        return True
+    except Exception as exc:  # noqa: BLE001 — fail soft -> fall back to the trip-compile agent
+        print(f"  single-receipt expense path errored (non-fatal, falling back): {exc!r}")
+        return False
+
+
 def _drive_agent_turn(svc, overlay: dict, intent, original_msg: dict,
                       fresh_text: str) -> None:
     """Invoke the cost_compiler_agent with the full conversation history
@@ -875,6 +936,14 @@ def _drive_agent_turn(svc, overlay: dict, intent, original_msg: dict,
     images = _extract_image_attachments(svc, original_msg)
     if images:
         print(f"  cost_compiler: {len(images)} receipt image(s) attached -> vision")
+    # Single-receipt expense fast path (operator decision 2026-06-06): a receipt photo + a
+    # "for <customer>" hint -> file ONE QB expense + attach the receipt (dry-run gated),
+    # instead of the trip-compile agent asking for dates/currency/scope. Fail-soft: returns
+    # False on any problem so the existing agent flow below still runs.
+    if images and _try_single_receipt_expense(
+        svc, overlay, intent, original_msg, fresh_text, images
+    ):
+        return
     result = cost_compiler_agent.run_agent(
         source_text=agent_input,
         overlay=overlay,
