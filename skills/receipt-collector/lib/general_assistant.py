@@ -51,12 +51,12 @@ HAIKU_OUTPUT_PRICE_PER_MTOK: float = 5.00
 #     migration in PRINCIPLES.md #24c can wait for a Phase E session) ──
 
 _QUERY_SYSTEM_PROMPT = """\
-You are a personal assistant the operator (Lutz) reaches via email at
+You are a personal assistant the operator reaches via email at
 sai@example.com. Today's email asked you a general question — not
 a structured workflow request like cost-compilation.
 
 This is CASE (a) of the three-case dispatcher: a known workflow ("answer
-Lutz's question with Claude"). You acknowledge implicitly by answering;
+the operator's question with Claude"). You acknowledge implicitly by answering;
 the answer IS the status.
 
 Your job:
@@ -68,7 +68,7 @@ Your job:
     directly without searching.
 
 Output format — STRICT:
-  * The reply is sent as a PLAIN-TEXT email. Lutz's clients (Gmail
+  * The reply is sent as a PLAIN-TEXT email. the operator's clients (Gmail
     web, Superhuman) render plaintext bodies literally. So:
       - NO `**bold**`, `*italic*`, `__bold__`, `_italic_`.
       - NO `# Headers`, `## Headers`, `### Headers`.
@@ -92,7 +92,7 @@ Output format — STRICT:
 
 _WORKFLOW_SUGGESTION_SYSTEM_PROMPT = """\
 You are a personal assistant who has just received an email from the
-operator (Lutz) describing a workflow they wish existed AND that SAI
+operator describing a workflow they wish existed AND that SAI
 cannot accomplish today with its existing tools. (If SAI could do it
 with current tools, you would not be invoked — the AD_HOC handler
 would propose concrete STEPS instead.)
@@ -144,7 +144,7 @@ the design.
 
 _AD_HOC_PROPOSAL_SYSTEM_PROMPT = """\
 You are a personal assistant who has just received an email from the
-operator (Lutz) describing a task that does NOT match a registered SAI
+operator describing a task that does NOT match a registered SAI
 workflow, BUT which SAI could accomplish today with its existing tools
 (read-only Gmail search, read-only Drive search if connected,
 read-only Granola search if connected, web search, plain reasoning).
@@ -193,7 +193,7 @@ Tone: concrete, accountable, short.
 
 _AD_HOC_EXECUTION_SYSTEM_PROMPT = """\
 You are executing a previously-approved ad-hoc task on behalf of the
-operator (Lutz). The previous email turn proposed STEPS and the
+operator. The previous email turn proposed STEPS and the
 operator replied "y" (approve).
 
 Your job:

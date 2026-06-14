@@ -133,6 +133,12 @@ loader. Format example (in `~/.config/sai/runtime.env`):
 ```
 OPENAI_API_KEY="keychain://sai/openai_api_key"
 SAI_LANGSMITH_API_KEY="op://Personal/SAI/langsmith_api_key"
+
+# Optional operator-identity overrides. The receipt-collector skill reads its
+# addresses from its overlay (config/identity.yaml -> email.*) first; these env
+# vars are an alternative/override and default to example.com placeholders.
+SAI_OPERATOR_CC_ADDRESS="op://Private/SAI/operator_cc_address"
+SAI_OPERATOR_SELF_ADDRESSES="hello@example.com,owner@example.com"
 ```
 
 ---

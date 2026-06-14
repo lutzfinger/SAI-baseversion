@@ -286,7 +286,7 @@ def test_intake_operator_only():
     op = ["hello@example.com"]
     good = intake.parse_trigger_email({"from": "Lutz <hello@example.com>", "subject": "yesterday I went to Berkeley"}, operator_addresses=op)
     assert good is not None and "Berkeley" in good.utterance
-    assert intake.parse_trigger_email({"from": "stranger@evil.com", "subject": "yesterday I went to Berkeley"}, operator_addresses=op) is None
+    assert intake.parse_trigger_email({"from": "stranger@example.net", "subject": "yesterday I went to Berkeley"}, operator_addresses=op) is None
     assert intake.parse_trigger_email({"from": "hello@example.com", "subject": "FW: invoice"}, operator_addresses=op) is None
 
 
@@ -334,7 +334,7 @@ def test_run_once_happy_writes_and_replies():
 
 
 def test_run_once_non_operator_ignored_no_reply():
-    gmail = _FakeGmail(["t1"], {"t1": {"from": "stranger@evil.com", "subject": "yesterday I went to Berkeley"}})
+    gmail = _FakeGmail(["t1"], {"t1": {"from": "stranger@example.net", "subject": "yesterday I went to Berkeley"}})
     replies = []
     res = run_daemon.run_once(gmail=gmail, fetch_day_context=_fetch_berkeley, config=_CFG,
                               reply_sender=lambda m, b: replies.append(b), now=date(2026, 6, 4),

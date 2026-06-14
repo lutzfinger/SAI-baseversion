@@ -8,7 +8,7 @@ from app.shared.config import Settings
 
 # Tests left from the Phase 3 split that need either a richer test_settings
 # fixture or env-isolation work before they can run. Each comes back in its
-# corresponding task migration (see MIGRATION-BACKLOG.md). Tests whose deps
+# corresponding task migration (see the private migration backlog). Tests whose deps
 # went away with the dropped modules have been removed entirely; what's left
 # below is the residue waiting on framework wiring in their own tasks.
 collect_ignore_glob = [

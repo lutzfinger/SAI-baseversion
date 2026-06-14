@@ -2,7 +2,7 @@
 email replies.
 
 The previous bot replies dumped raw subprocess stdout / exit codes /
-file paths into the email body. The operator (Lutz, 2026-05-20) called
+file paths into the email body. The operator called
 this "non human readable, way too badly written."
 
 This module rewrites bot output in a conversational tone, with the
@@ -61,7 +61,7 @@ from typing import Optional
 
 # ─── markdown → plaintext output guard ─────────────────────────────────
 #
-# Lutz's clients (Gmail web, Superhuman) render plaintext email bodies
+# the operator's clients (Gmail web, Superhuman) render plaintext email bodies
 # literally — so `**Subject**`, `## Header`, `---`, and `[text](url)`
 # show with the markup. Per SAI #6a (output guards on every boundary)
 # we unwrap them before send. This is intentionally conservative: we

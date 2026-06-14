@@ -14,7 +14,7 @@ description: |
   Invoice is created.
 
   Pattern mirrored from `app/agents/sai_eval_agent.surface.yaml` —
-  see `docs/PLAN.md` Phase E for promotion path to a framework
+  see a future plan for promotion path to a framework
   primitive once multiple skills need a trigger-to-plan agent.
 
 # Per principle #24a (Open framework, single API surface) we use the

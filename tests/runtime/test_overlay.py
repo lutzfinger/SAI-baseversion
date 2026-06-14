@@ -295,7 +295,7 @@ def test_type_conflict_errors_dir_over_file(
 
 # 22
 def test_demo_fixtures_yield_shadowed_count_one(out_path: Path) -> None:
-    """Ties the manual demo in HANDOFF.md to a real assertion."""
+    """Ties the manual overlay demo to a real assertion."""
     r = merge(
         public=DEMO_FIXTURES / "public",
         private=DEMO_FIXTURES / "private",

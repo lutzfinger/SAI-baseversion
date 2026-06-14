@@ -28,7 +28,7 @@ State file layout (one JSONL row per state transition):
     ~/Library/Application Support/SAI/receipt-collector/approvals/<request_id>.jsonl
 
 Each row:
-    {"ts": 1700000000, "state": "OPEN"|"APPROVED"|...,
+    {"ts": <unix_ts>, "state": "OPEN"|"APPROVED"|...,
      "surface": "cli"|"slack"|...,
      "trip_slug": "...", "actor": "operator"|"system", "note": "..."}
 

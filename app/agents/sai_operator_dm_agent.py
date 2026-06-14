@@ -121,7 +121,7 @@ def _invoke_skill_cascade(
     import importlib.util as _ilu
     sai_public = Path(
         os.environ.get("SAI_PUBLIC_ROOT",
-                       str(Path.home() / "Lutz_Dev" / "SAI-baseversion"))
+                       str(Path(__file__).resolve().parents[2]))
     )
     runner_path = sai_public / "skills" / workflow_id / "runner.py"
     if not runner_path.exists():
@@ -312,7 +312,7 @@ def run_dm_agent(
         if not prompt_path.exists():
             prompt_path = Path(os.environ.get(
                 "SAI_PUBLIC_ROOT",
-                str(Path.home() / "Lutz_Dev" / "SAI-baseversion"),
+                str(Path(__file__).resolve().parents[2]),
             )) / "prompts" / SYSTEM_PROMPT_RELPATH
         system_prompt = prompt_path.read_text()
 

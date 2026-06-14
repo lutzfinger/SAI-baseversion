@@ -1,2 +1,2 @@
 {"ts":"2026-05-27T16:00:00Z","skill":"sample-alpha","version":"0.1.0","target":"claude_code","approved_by":"sync_skills/sample-alpha/v0.1.0","files":[{"relpath":"SKILL.md","sha256":"3ac9...placeholder"},{"relpath":"references/note.md","sha256":"7bf2...placeholder"}],"result":"ok"}
-{"ts":"2026-05-27T16:00:05Z","skill":"sample-alpha","version":"0.1.0","target":"cowork","approved_by":"sync_skills/sample-alpha/v0.1.0","package":"~/Lutz_Dev/SAI/dist/skills/sample-alpha-v0.1.0.skill","package_sha256":"abcd...placeholder","result":"ok"}
+{"ts":"2026-05-27T16:00:05Z","skill":"sample-alpha","version":"0.1.0","target":"cowork","approved_by":"sync_skills/sample-alpha/v0.1.0","package":"~/SAI/dist/skills/sample-alpha-v0.1.0.skill","package_sha256":"abcd...placeholder","result":"ok"}

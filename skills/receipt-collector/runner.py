@@ -14,7 +14,7 @@ Usage:
   python -m skills.receipt-collector.runner search-receipts --start 2026-05-05 --end 2026-05-18
   python -m skills.receipt-collector.runner create-purchases  --trip insead-2026-05 --plan plan.json
   python -m skills.receipt-collector.runner create-invoice    --trip insead-2026-05 --plan plan.json
-  python -m skills.receipt-collector.runner cleanup-pass      --rules ~/Lutz_Dev/SAI/skills/receipt-collector/bookkeeping-rules.md
+  python -m skills.receipt-collector.runner cleanup-pass      --rules ~/SAI/skills/receipt-collector/bookkeeping-rules.md
 """
 from __future__ import annotations
 
@@ -1240,7 +1240,7 @@ def cmd_cleanup_pass(args, overlay: dict) -> int:
     """
     rules_path = Path(os.path.expanduser(
         args.rules or overlay.get("bookkeeping_rules_path") or
-        "~/Lutz_Dev/SAI/skills/receipt-collector/bookkeeping-rules.md"
+        "~/SAI/skills/receipt-collector/bookkeeping-rules.md"
     ))
     if not rules_path.exists():
         print(f"No rules file at {rules_path}", file=sys.stderr)
@@ -1301,7 +1301,7 @@ def cmd_cleanup_pass(args, overlay: dict) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="receipt-collector")
-    p.add_argument("--overlay", default=os.environ.get("SAI_RECEIPT_OVERLAY", "~/Lutz_Dev/SAI/skills/receipt-collector"),
+    p.add_argument("--overlay", default=os.environ.get("SAI_RECEIPT_OVERLAY", "~/SAI/skills/receipt-collector"),
                    help="Path to the operator overlay folder (env: SAI_RECEIPT_OVERLAY).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -1455,7 +1455,7 @@ def main() -> int:
     s.add_argument("--account", required=True, help="Label saved in the token filename. Use 'personal' for your private Google account, 'work' for the work one.")
     s.set_defaults(fn=cmd_gphotos_auth)
 
-    s = sub.add_parser("scan-gphotos", help="Search Google Photos for media items in a date window. Subject to Google's partner-only restriction (March 2025).")
+    s = sub.add_parser("scan-gphotos", help="Search Google Photos for media items in a date window. Subject to Google partner-only restriction (March 2025).")
     s.add_argument("--account", required=True)
     s.add_argument("--trip", required=True)
     s.add_argument("--start", required=True)

@@ -8,7 +8,7 @@ accounting rules in their overlay's `bookkeeping-rules.md`, e.g.:
     Rule:      All food consumed while traveling for business is NOT
                reimbursable but IS a deductible business-travel cost.
     QB action: tag any food/restaurant expense to account
-               Travel:Travel meals (Id=1150040006).
+               Travel:Travel meals (Id=<account_id>).
     Triggers:  Purchase whose vendor matches restaurant/cafe/bistro/bar
                OR existing AccountRef is meals category AND TxnDate is
                in an active trip window.

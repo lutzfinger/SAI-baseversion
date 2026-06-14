@@ -1,7 +1,7 @@
 home_label: "Mountain View"
 sheet_url: "https://docs.google.com/spreadsheets/d/EXAMPLE/edit"
 time_tracking_gid: 578766988
-distance_gid: 1125242108
+distance_gid: 1234567
 business_pct_default: 100
 kill_switch_env: "SAI_TRIP_MILEAGE_SEND_ENABLED"
 place_aliases:

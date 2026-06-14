@@ -3,8 +3,8 @@
 Runs inside the sai@ receipt-collector daemon. Turn 1 (auto, low-risk):
 parse, resolve who <name> is (inbox + QBO fallback), create the customer if
 missing, create the invoice UNSENT, email the summary in-thread, open an
-AWAITING_APPROVAL intent. On the operator's APPROVE reply -> send (CC
-hello@example.com); REJECT -> delete the unsent draft; ambiguous -> ask y/n.
+AWAITING_APPROVAL intent. On the operator's APPROVE reply -> send (CC the
+operator's configured address); REJECT -> delete the unsent draft; ambiguous -> ask y/n.
 
 The SEND is the ONLY gated side effect (PRINCIPLES #2/#7a: it never fires
 without the operator's explicit reply). Pure logic comes from the one source of
@@ -23,9 +23,12 @@ from typing import Callable, Optional
 
 from lib import email_intents
 from lib import invoice_logic_bridge as L
+from lib.operator_identity import cc_address as _cc
 from lib.qb_client import QBClient
 
-CC_ADDRESS = "hello@example.com"
+# Fallback only — live paths resolve the CC via _cc(overlay) from the private
+# overlay (config/identity.yaml). Placeholder keeps operator PII out of public.
+CC_ADDRESS = os.getenv("SAI_OPERATOR_CC_ADDRESS", "hello@example.com")
 AUDIT_PATH = os.path.expanduser("~/Library/Logs/SAI/invoice-draft-and-send.jsonl")
 PENDING_DB = os.path.expanduser(
     "~/Library/Application Support/SAI/invoice-draft-and-send/pending.db"
@@ -229,7 +232,7 @@ def handle_new_invoice_trigger(
     inv_obj = {
         "CustomerRef": {"value": str(customer_id)},
         "BillEmail": {"Address": resolution.email},
-        "BillEmailCc": {"Address": CC_ADDRESS},
+        "BillEmailCc": {"Address": _cc(overlay)},
         "Line": [{
             "DetailType": "SalesItemLineDetail",
             "Amount": float(parsed.amount),
@@ -254,7 +257,7 @@ def handle_new_invoice_trigger(
         customer_state=customer_state, amount=parsed.amount,
         amount_display=parsed.amount_display, services=parsed.services,
         invoice_id=f"{doc} (id {invoice_id})", invoice_link="",
-        cc=CC_ADDRESS, income_account=income_account,
+        cc=_cc(overlay), income_account=income_account,
         income_unconfirmed=not bool(income_account),
     )
     summary = L.build_summary(facts)["text"]
@@ -276,7 +279,7 @@ def handle_new_invoice_trigger(
         "invoice_id": invoice_id, "trigger_hash": th, "status": "pending",
         "medium": "email", "origin_ref": thread_id, "customer": resolution.name,
         "email": resolution.email, "amount": str(parsed.amount),
-        "services": parsed.services, "cc": CC_ADDRESS,
+        "services": parsed.services, "cc": _cc(overlay),
     })
     _audit("invoice_drafted", thread_id=thread_id, invoice_id=invoice_id,
            doc=doc, customer=resolution.name, amount=str(parsed.amount),
@@ -311,7 +314,7 @@ def handle_invoice_reply(
             email_intents.set_status(intent, email_intents.IntentStatus.COMPLETED)
             return {"status": "already_sent"}
         store.set_status(invoice_id, "approved")
-        cc = row.get("cc") or CC_ADDRESS
+        cc = row.get("cc") or _cc(overlay)
         qb.send_invoice(invoice_id, to_email=row["email"], cc_email=cc)
         store.set_status(invoice_id, "sent")
         send_reply(overlay, msg,

@@ -412,9 +412,10 @@ def _pydantic_errors_to_issues(
 # ─── smoke test over every real skill in (SAI ∪ SAI-baseversion) ─────
 
 
+_PUBLIC_ROOT = Path(__file__).resolve().parents[2]
 _REAL_SKILL_ROOTS: tuple[Path, ...] = (
-    Path.home() / "Lutz_Dev" / "SAI" / "skills",
-    Path.home() / "Lutz_Dev" / "SAI-baseversion" / "skills",
+    _PUBLIC_ROOT.parent / "SAI" / "skills",
+    _PUBLIC_ROOT / "skills",
 )
 
 
@@ -489,7 +490,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help=(
             "Walk every skill.yaml under "
-            "(~/Lutz_Dev/SAI ∪ ~/Lutz_Dev/SAI-baseversion)/skills/ and report. "
+            "(~/SAI ∪ ~/SAI-baseversion)/skills/ and report. "
             "Exit 0 if all pass, 1 if any fail."
         ),
     )

@@ -2,21 +2,27 @@
 # One path per line, each entry MUST be followed by a comment explaining why
 # the file is permitted to contain otherwise-flagged content.
 
-HANDOFF.md
-# Phase 0 handoff doc references Lutz_Dev paths in concrete `cd ~/Lutz_Dev/...`
-# install instructions for the SAI-baseversion repo on Lutz's Mac. The doc is
-# instructional / setup-specific.
-
-PHASE-0-DONE.md
-# Phase report describing where artifacts landed in Lutz's working tree.
-
-PHASE-1-DONE.md
-# Phase report. References lutzfinger / op:// / keychain:// inside backticks
-# as documentation of the rule patterns themselves.
-
 app/shared/runtime_env.py
 # Framework code that parses keychain:// references. Must mention the scheme
 # name to do its job.
+
+app/connectors/granola.py
+# Connector that resolves the Granola API key from env / op:// / keychain://.
+# The functional `startswith("op://")` / `startswith("keychain://")` guards and
+# the secret-resolution-order docstring must name the schemes to do their job.
+
+skills/receipt-collector/lib/op_env.py
+# 1Password env helper. Docstring names the op:// scheme it resolves; must
+# mention it to explain itself.
+
+scripts/run_dm_agent_canaries.py
+# Canary script comment references the op:// scheme to explain why the loader
+# behaves as it does. Not a real secret reference.
+
+skills/receipt-collector/lib/receipt_match.py
+# Documents + defaults the public vendor RECEIPT-sender addresses
+# (Receipts@united.com, noreply@uber.com, no-reply@lyftmail.com) used to match
+# receipts. These are public vendor noreply addresses, not operator PII.
 
 scripts/regression_test_email_classifier.py
 # Script comment documents the op:// / keychain:// scheme names to explain
@@ -26,10 +32,6 @@ docs/slack_bot_install.md
 # Slack bot install runbook documents the op:// secret-reference scheme
 # so operators know how to wire 1Password tokens into runtime.env.
 
-PHASE-2-DONE.md
-# Phase 2 report documents the boundary linter's rules — must show examples
-# of what each rule catches.
-
 tests/runtime/test_boundary_check.py
 # Test file for the boundary linter. Must contain trigger examples for each
 # rule (otherwise it can't test them). Not real personal data.
@@ -38,10 +40,6 @@ tests/test_disambiguation.py
 # Uses 10-digit Unix-epoch-shaped timestamps as Slack message_ts fixtures
 # (1700000001, 1700000002, 1700000003). Phone-number regex matches them.
 # All synthetic test data, not operator data.
-
-PHASE-3-PARTIAL-DONE.md
-# Phase 3 partial report. References the private repo path Lutz_Dev/SAI
-# while explaining what landed.
 
 CUSTOMIZE-ME.md
 # Customization punch list documents the op:// (1Password CLI) and
@@ -75,7 +73,7 @@ docs/onboarding_wizard_prompt.md
 docs/cowork_skill_creator_prompt.md
 # Skill-creator prompt for Co-Work. References canonical SAI
 # channel names (#sai-eval) and example skill paths in the
-# operator's overlay (Lutz_Dev/SAI/skills/) as concrete examples
+# operator's overlay (SAI/skills/) as concrete examples
 # of the canonical layout.
 
 config/.env.example.1password

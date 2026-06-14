@@ -397,7 +397,7 @@ class ValidationReport(BaseModel):
 
 # ─── v2 schema: multi-profile skill manifest ─────────────────────────
 #
-# See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md for rationale.
+# See ~/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md for rationale.
 #
 # v1 (above) = single SAI workflow per skill.yaml. v2 = one skill_id can
 # carry multiple deliverables (e.g., a granola-fetch SAI workflow runner

@@ -39,7 +39,7 @@ Configuration required in overlay (`identity.yaml`):
         op_item: "<your slack bot 1Password item name>"
         op_vault: "<vault>"
         field: "credential"
-      channel_id: "C0XXXXXXXX"     # operator's #sai-cost-compiler channel
+      channel_id: "C0XXXXXXXX"     # operator SAI cost channel
       operator_user_id: "U0XXXXXX" # the only user allowed to trigger
 
 Public API:

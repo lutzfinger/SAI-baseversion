@@ -11,7 +11,7 @@ This module adds that independent review, mirroring the daemon's existing
   1. **Deterministic tier (free):** the recipient address MUST be grounded
      — it appears in the Gmail search evidence OR verbatim in the operator's
      request. An ungrounded recipient is the highest-value catch (a draft to
-     the wrong "Jane" is one click from being mis-sent) and needs no LLM.
+     the wrong recipient is one click from being mis-sent) and needs no LLM.
   2. **LLM tier (different model):** only if the recipient is grounded, a
      DIFFERENT model from the Haiku draft-builder reviews the body for
      fabricated Forbes claims / off-topic / unauthorized commitments.

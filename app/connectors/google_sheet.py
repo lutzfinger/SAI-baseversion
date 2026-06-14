@@ -53,7 +53,7 @@ def _auth_gspread_client():
     tok = token_path()
     if not creds.exists():
         raise FileNotFoundError(
-            f"Missing {creds}. See ~/Lutz_Dev/SAI/skills/student-participation-check/SETUP.md"
+            f"Missing {creds}. See ~/SAI/skills/student-participation-check/SETUP.md"
         )
     try:
         return gspread.oauth(

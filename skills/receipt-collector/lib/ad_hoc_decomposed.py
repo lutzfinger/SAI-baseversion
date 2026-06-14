@@ -2,7 +2,7 @@
 
 Replaces the old two-turn propose→approve→execute AD_HOC flow for
 tasks that decompose into read-only context-gathering + a single
-reviewable write (e.g. "draft a reply to jane about my latest
+reviewable write (e.g. "draft a reply to alex about my latest
 Forbes article").
 
 Flow (ONE operator turn):
@@ -39,6 +39,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+from lib.operator_identity import self_addresses
 
 
 # Operator-specific default; overlay can override via
@@ -85,18 +87,18 @@ Rules:
 - Every {{evidence:X}} placeholder MUST match an auto_steps step_id.
   Every {{write_step:X}} MUST match a write_steps step_id.
 
-Canonical example — request: "draft a Gmail reply to jane about my
+Canonical example — request: "draft a Gmail reply to alex about my
 latest Forbes article, 3-sentence summary with the link":
 
 {
   "auto_steps": [
-    {"step_id": "step_1_find_jane", "kind": "gmail_search", "args": {"query": "from:jane OR jane", "max_results": 5}},
+    {"step_id": "step_1_find_alex", "kind": "gmail_search", "args": {"query": "from:alex OR alex", "max_results": 5}},
     {"step_id": "step_2_forbes", "kind": "forbes_latest", "args": {"n": 3}}
   ],
   "write_steps": [
-    {"step_id": "step_3_draft", "kind": "gmail_create_draft", "proposed_action": "Draft a 3-sentence reply to the chosen Jane about the latest Forbes article, with the link."}
+    {"step_id": "step_3_draft", "kind": "gmail_create_draft", "proposed_action": "Draft a 3-sentence reply to the chosen Alex about the latest Forbes article, with the link."}
   ],
-  "final_response_template": "I don't have a pre-approved skill for this, but I did the read-only parts already.\\n\\nAUTO-EXECUTED (read-only, no cost):\\n\\n{{evidence:step_1_find_jane}}\\n\\n{{evidence:step_2_forbes}}\\n\\nNEEDS YOUR APPROVAL:\\n\\n{{write_step:step_3_draft}}\\n\\nReply 'y' to create the draft, or 'use jane <email>' / 'use article <N>' to steer. Nothing is sent without your review."
+  "final_response_template": "I don't have a pre-approved skill for this, but I did the read-only parts already.\\n\\nAUTO-EXECUTED (read-only, no cost):\\n\\n{{evidence:step_1_find_alex}}\\n\\n{{evidence:step_2_forbes}}\\n\\nNEEDS YOUR APPROVAL:\\n\\n{{write_step:step_3_draft}}\\n\\nReply 'y' to create the draft, or 'use alex <email>' / 'use article <N>' to steer. Nothing is sent without your review."
 }
 """
 
@@ -348,7 +350,7 @@ def is_draft_intent(proposal_text: str) -> bool:
 def extract_email(text: str) -> Optional[str]:
     """Pull the first email address out of operator steering text.
 
-    "no not to this jane but jane.alt@example.org" -> "jane.alt@example.org".
+    "no not to this alex but jane.alt@example.org" -> "jane.alt@example.org".
     Returns None when the reply has no address (then a clean 'no' is a
     real reject, not steering)."""
     m = _EMAIL_RE.search(text or "")
@@ -366,7 +368,7 @@ You are given:
     (with snippets — use these to detect the recipient's main
     language) + the operator's most-recent Forbes articles
     (title + url).
-  - Optional operator steering feedback (e.g. "no, use bob@x.com" or
+  - Optional operator steering feedback (e.g. "no, use bob@example.com" or
     "use article 2"). When present, the feedback OVERRIDES defaults.
 
 Resolve:
@@ -375,7 +377,7 @@ Resolve:
     requested person, USE IT directly — do NOT ask. Only set
     needs_clarification=true when there are genuinely 2+ different
     people matching the name with no way to choose, OR zero matches.
-    A single clear match (e.g. one "Jane Doe" for "jane") is NOT
+    A single clear match (e.g. one "Alex Rivera" for "alex") is NOT
     ambiguous — draft to them. Don't second-guess context from
     snippet topics.
   - article: the Forbes article to summarize. Default to the most
@@ -411,7 +413,7 @@ hints needed to gather context. Return ONE JSON object, no prose:
 
 {
   "task_kind": "draft_email" | "calendar_block" | "other",
-  "recipient_hint": "<for draft_email: the person to write to, e.g. 'jane'>",
+  "recipient_hint": "<for draft_email: the person to write to, e.g. 'alex'>",
   "topic_hint": "<for draft_email: what to write about, e.g. 'latest forbes article'>",
   "calendar_day_hint": "<for calendar_block: 'tomorrow' | a date | ''>",
   "origin_hint": "<for calendar_block: starting place, e.g. 'Mountain View'>",
@@ -499,7 +501,7 @@ def build_and_create_draft(
     operator-facing status reply.
 
     When the LLM can't resolve a recipient/article (e.g. multiple
-    Janes, no steering), returns the clarification question and creates
+    Alexs, no steering), returns the clarification question and creates
     NOTHING — fail-closed, intent stays open for the operator's next
     turn (#16g)."""
     user_text = (
@@ -710,21 +712,24 @@ def auto_execute_ad_hoc(*, text: str, overlay: dict, claude_loop_fn: Callable,
 
     # ---- draft_email -------------------------------------------------
     if kind == "draft_email":
-        query = (route.get("recipient_hint") or "").strip() or "jane"
+        query = (route.get("recipient_hint") or "").strip()
         # Widen recall: search the name as sender OR anywhere, and exclude
-        # the operator's own address so the meta-thread noise (all from
-        # hello@) doesn't crowd out the actual person. Bigger max_results
+        # the operator's own addresses so the meta-thread noise (all from the
+        # operator) doesn't crowd out the actual person. Bigger max_results
         # since dedup-by-sender collapses duplicates.
-        gmail_q = f"({query}) -from:hello@example.com -from:owner@example.com"
-        try:
-            cands = gmail_search(query=gmail_q, max_results=15)
-        except Exception:
-            cands = []
-        if not cands:  # fallback: include everything (operator may BE the contact)
+        cands = []
+        if query:
+            _excl = " ".join(f"-from:{a}" for a in self_addresses(overlay))
+            gmail_q = f"({query}) {_excl}".strip()
             try:
-                cands = gmail_search(query=query, max_results=15)
+                cands = gmail_search(query=gmail_q, max_results=15)
             except Exception:
                 cands = []
+            if not cands:  # fallback: include everything (operator may BE the contact)
+                try:
+                    cands = gmail_search(query=query, max_results=15)
+                except Exception:
+                    cands = []
         try:
             arts = forbes_latest(n=3, root=(overlay or {}).get("forbes_articles_root"))
         except Exception:

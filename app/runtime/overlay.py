@@ -396,7 +396,7 @@ def merge(
     _write_manifest(result)
 
     # ── PR 1 — non-fatal skill.yaml validation pre-check ────────────────
-    # See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
+    # See ~/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
     # ~/Claude-Logs/code-plans/2026-05-27-sai-overlay-deploy-pr1-schema-validator.md.
     # Walks every skill.yaml in the merged tree; logs [validator] warnings
     # on failures. NEVER blocks the merge in this PR — behavior change to
@@ -527,7 +527,7 @@ def verify(runtime: Path) -> tuple[list[str], list[str], list[str]]:
 
 # ─── deploy (PR 2) — claude_code target ──────────────────────────────
 #
-# See ~/Lutz_Dev/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
+# See ~/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md and
 # ~/Claude-Logs/code-plans/2026-05-27-pr1a-schema-fits-reality-plus-pr2-deploy.md.
 #
 # Reads a merged skill's claude_code profile and copies its files to
@@ -771,7 +771,7 @@ def cli(argv: list[str] | None = None) -> int:
     )
     p_deploy.add_argument(
         "--sai-repo", type=Path,
-        default=Path(os.path.expanduser("~/Lutz_Dev/SAI")),
+        default=Path(__file__).resolve().parents[2].parent / "SAI",
         help="repo where the approval tag lives",
     )
     p_deploy.add_argument("--approved-by", default=None, help="approval git tag")

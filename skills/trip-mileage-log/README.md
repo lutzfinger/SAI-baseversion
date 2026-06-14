@@ -35,7 +35,7 @@ python skills/trip-mileage-log/runner.py \
 (omit `--write`; the kill-switch also stays off unless `SAI_TRIP_MILEAGE_SEND_ENABLED=1`.)
 
 ## Install the daemon (operator)
-1. Configure private values in `~/Lutz_Dev/SAI/config/trip_mileage.yaml`
+1. Configure private values in `~/SAI/config/trip_mileage.yaml`
    (`operator_addresses`, `reply_to`, `sai_from`, `distance`, `max_local_miles`,
    `max_writes_per_day`).
 2. Wire `run_daemon.main()` to your Gmail operator token + threaded reply sender

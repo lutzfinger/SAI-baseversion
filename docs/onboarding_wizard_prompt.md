@@ -365,7 +365,7 @@ launchd-managed slack bot.
 | `Unsupported parameter: temperature` | gpt-5 model rejecting param | switch to a non-reasoning model OR use Claude |
 | OAuth flow returns "redirect URI mismatch" | Google Cloud creds set as Web app, not Desktop | recreate creds as Desktop app |
 | `op://` references resolve as None | `OP_SERVICE_ACCOUNT_TOKEN` not in env | check `with_runtime_env.sh` is wrapping the command |
-| Canary regen fails with `level1_fallback not in Literal` | taxonomy has a bucket not in `Level1Classification` | add the bucket to `app/workers/email_models.py` (dynamic-taxonomy support is on the roadmap; see `MIGRATION-BACKLOG.md`) |
+| Canary regen fails with `level1_fallback not in Literal` | taxonomy has a bucket not in `Level1Classification` | add the bucket to `app/workers/email_models.py` (dynamic-taxonomy support is on the roadmap) |
 
 If you hit one of these or anything else not listed: stop, dump
 the error verbatim, and ask the user to share it. Don't guess.

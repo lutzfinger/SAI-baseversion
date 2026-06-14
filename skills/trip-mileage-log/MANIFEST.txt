@@ -19,7 +19,7 @@ Composed framework primitive (its OWN ship — §33a, NOT skill code):
   app/connectors/calendar.py     + list_events_on_date (additive, Phase 1)
 
 Private (operator overlay — NOT in this base skill):
-  ~/Lutz_Dev/SAI/config/trip_mileage.yaml          home, sheet, gids, distance, kill-switch, operator addresses
-  ~/Lutz_Dev/SAI/app/control_plane/scheduled_jobs.py   ScheduledJobSpec (wants_watchdog) — operator install
+  ~/SAI/config/trip_mileage.yaml          home, sheet, gids, distance, kill-switch, operator addresses
+  ~/SAI/app/control_plane/scheduled_jobs.py   ScheduledJobSpec (wants_watchdog) — operator install
 
 Tests (offline): tests/test_trip_mileage_log.py, tests/test_distance_connector.py, tests/test_calendar_events_on_date.py

@@ -45,7 +45,7 @@ load_runtime_env_best_effort()
 #   (b) someone invoked this subprocess directly without sourcing runtime.env.
 # Both surface as the Anthropic SDK's generic "Could not resolve
 # authentication method" — opaque to the operator (we hit this exact bug
-# 2026-05-20 night; see ~/Lutz_Dev/SAI/docs/dm-agent-fix-2026-05-21/).
+# 2026-05-20 night; see ~/SAI/docs/dm-agent-fix-2026-05-21/).
 #
 # We pre-check here and emit a recovery-oriented stdout JSON instead.
 # The slack handler posts the friendly message to the DM thread, so the

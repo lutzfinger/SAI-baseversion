@@ -1,6 +1,6 @@
 # Overlay merge demo fixtures
 
-Two minimal trees for the manual demo in `HANDOFF.md` and the `shadowed_count`
+Two minimal trees for the manual overlay demo and the `shadowed_count`
 test in `tests/runtime/test_overlay.py`.
 
 ```

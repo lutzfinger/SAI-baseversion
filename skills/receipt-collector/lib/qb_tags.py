@@ -3,7 +3,7 @@ QB tag + memo operations on Purchases.
 
 The QBO v3 REST API does NOT expose the `Tag` entity (verified 2026-05-20 —
 both `SELECT * FROM Tag` and `GET /tag` return "Unsupported Operation").
-The Tags feature is UI-only on Lutz's plan.
+The Tags feature is UI-only on the operator's plan.
 
 This module therefore does the only piece the public API supports:
 

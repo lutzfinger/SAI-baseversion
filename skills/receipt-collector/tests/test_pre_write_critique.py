@@ -36,14 +36,14 @@ def _ns(final_text: str):
 
 
 def test_recipient_grounding() -> None:
-    cands = ["jane.doe@example.com", "other@x.com"]
+    cands = ["jane.doe@example.com", "other@example.org"]
     assert recipient_is_grounded("jane.doe@example.com", cands, "draft to jane") is True
     # mixed case + the same address still grounds
     assert recipient_is_grounded("Jane.Doe@Example.com", cands, "draft to jane") is True
     # only present in the request text
     assert recipient_is_grounded("bob@example.com", [], "send it to bob@example.com") is True
     # in neither evidence nor request → not grounded
-    assert recipient_is_grounded("stranger@nope.com", cands, "draft to jane") is False
+    assert recipient_is_grounded("stranger@example.net", cands, "draft to jane") is False
 
 
 # ── Test 2 — verdict schema + fail_closed helper ──────────────────────
@@ -70,7 +70,7 @@ def test_deterministic_fail_no_llm() -> None:
 
     v = critique_draft(
         request_text="draft to jane",
-        recipient_email="stranger@nope.com",
+        recipient_email="stranger@example.net",
         draft_body="hi",
         candidate_emails=["jane.doe@example.com"],
         forbes_evidence=[],
@@ -204,7 +204,7 @@ def test_integration_ungrounded_held(_patch_daemon_io) -> None:
     created = _patch_daemon_io
     result = ad.auto_execute_ad_hoc(
         text=_REQUEST, overlay={},
-        claude_loop_fn=_make_loop("wrong.person@nope.com", critique_verdict="passed"),
+        claude_loop_fn=_make_loop("wrong.person@example.net", critique_verdict="passed"),
     )
     assert result["did_write"] is False
     assert result["status_label"] == "SAI/proposal"

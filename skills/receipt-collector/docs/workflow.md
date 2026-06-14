@@ -1,7 +1,7 @@
 # cost-compiler — end-to-end workflow
 
 **(Currently shipped under `skills/receipt-collector/`. A rename to
-`cost-compiler` is proposed in `docs/PLAN.md` Phase A.)**
+`cost-compiler` is planned.)**
 
 This document is the canonical description of how the skill processes a
 customer reimbursement trip. It maps the operator's 10-step workflow
@@ -11,7 +11,7 @@ each step, and flags gaps that are not yet implemented.
 It lives in `SAI-baseversion` so it's reusable by any operator. The
 operator's specific identifiers (customer Ids, vendor Ids, 1Password
 item names, Gmail forward addresses) live in the overlay at
-`~/Lutz_Dev/SAI/skills/<skill>/config/identity.yaml`.
+`~/SAI/skills/<skill>/config/identity.yaml`.
 
 ---
 
@@ -33,7 +33,7 @@ choices the operator asked to be made explicit:
 4. **Cost control.** Every LLM call writes to
    `~/Library/Logs/SAI/llm_costs.jsonl` with tokens + USD cost.
    Cost cap per call is declared in `skill.yaml` per tier. Daily cap
-   is a planned gap (Phase A.4 in `docs/PLAN.md`).
+   is a planned gap.
 5. **Security.** No secrets in either repo — all references resolve
    to 1Password items at runtime. `OP_SERVICE_ACCOUNT_TOKEN`
    auto-loads from macOS Keychain so no biometric prompt fires
@@ -285,7 +285,7 @@ later run.
 - Per-step events: `~/Library/Logs/SAI/receipt-collector.jsonl`
 - LLM-call costs: `~/Library/Logs/SAI/llm_costs.jsonl`
 - FX rate cache (audit + reuse): `~/Library/Caches/SAI/fx_rates.json`
-- Per-trip artifacts: `~/Lutz_Dev/SAI/skills/receipt-collector/trip_runs/<slug>/`
+- Per-trip artifacts: `~/SAI/skills/receipt-collector/trip_runs/<slug>/`
 
 ⚠ **Small-LLM-first**
 - Vision: Claude Haiku 4.5 (cheapest tier) — ✅

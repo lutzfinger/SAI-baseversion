@@ -12,7 +12,7 @@ fixed in one copy must not linger in another).
 Path resolution order (fail closed if none import):
   1. $SAI_INVOICE_LIB_DIR              (explicit override, used by tests)
   2. ~/.sai-runtime/skills/invoice-draft-and-send/lib   (production runtime)
-  3. ~/Lutz_Dev/SAI/skills/invoice-draft-and-send/lib   (working-repo source)
+  3. ~/SAI/skills/invoice-draft-and-send/lib   (working-repo source)
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pathlib import Path
 _CANDIDATES = [
     os.environ.get("SAI_INVOICE_LIB_DIR"),
     os.path.expanduser("~/.sai-runtime/skills/invoice-draft-and-send/lib"),
-    os.path.expanduser("~/Lutz_Dev/SAI/skills/invoice-draft-and-send/lib"),
+    os.path.expanduser("~/SAI/skills/invoice-draft-and-send/lib"),
 ]
 
 

@@ -763,7 +763,7 @@ def _route_ad_hoc_reply(overlay: dict, intent, original_msg: dict,
     # --- Auto-exec intent feedback (2026-05-28) --------------------------
     # Turn-1 already DID the low-risk work (created the draft / calendar
     # block) and the reply opened with "Auto Execution". So feedback now
-    # means: bare approve = "already done"; steering ("no, use X@y.com")
+    # means: bare approve = "already done"; steering ("no, use X@example.com")
     # or edits = RE-RUN the auto-exec with the feedback (re-draft to the
     # corrected recipient / redo the block); bare reject = drop + tell the
     # operator to delete the artifact. Steering is checked before reject
@@ -1169,7 +1169,7 @@ def _on_approval(svc, overlay: dict, intent, original_msg: dict) -> None:
     import os as _os
     overlay_root = _os.path.expanduser(
         overlay.get("trip_runs_root")
-        or "~/Lutz_Dev/SAI/skills/receipt-collector/trip_runs"
+        or "~/SAI/skills/receipt-collector/trip_runs"
     )
     candidate_plan = _os.path.join(overlay_root, slug, "plan.json")
     invoice_plan_path = (

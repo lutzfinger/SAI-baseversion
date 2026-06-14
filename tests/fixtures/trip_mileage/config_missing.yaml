@@ -1,4 +1,4 @@
 home_label: "Mountain View"
 # sheet_url intentionally omitted -> load_trip_config must fail closed
 time_tracking_gid: 578766988
-distance_gid: 1125242108
+distance_gid: 1234567

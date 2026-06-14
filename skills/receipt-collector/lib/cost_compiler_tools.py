@@ -253,7 +253,7 @@ def propose_plan(
 
     # ── write staged plan ────────────────────────────────────────────
     trip_runs_root = ctx.overlay.get("trip_runs_root") or (
-        "~/Lutz_Dev/SAI/skills/receipt-collector/trip_runs"
+        "~/SAI/skills/receipt-collector/trip_runs"
     )
     out_dir = Path(os.path.expanduser(trip_runs_root)) / trip_slug
     out_dir.mkdir(parents=True, exist_ok=True)

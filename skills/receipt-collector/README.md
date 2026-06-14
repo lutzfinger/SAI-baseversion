@@ -2,7 +2,7 @@
 
 Collect business-trip travel receipts from multiple sources (Gmail receipts, QuickBooks credit-card registers, Receipts inbox forwards) and assemble a customer reimbursement invoice in QuickBooks Online.
 
-The base skill is **operator-agnostic** — no hard-coded vendor IDs, account IDs, customer names, or credentials. An operator overlay (e.g., `~/Lutz_Dev/SAI/skills/receipt-collector/`) supplies all personal mappings via `config/identity.yaml` + 1Password references.
+The base skill is **operator-agnostic** — no hard-coded vendor IDs, account IDs, customer names, or credentials. An operator overlay (e.g., `~/SAI/skills/receipt-collector/`) supplies all personal mappings via `config/identity.yaml` + 1Password references.
 
 ## Architecture
 
@@ -148,7 +148,7 @@ A minimal overlay folder must provide:
 └── trip_runs/<slug>/          # per-trip artifacts (created at runtime)
 ```
 
-See the existing overlay at `~/Lutz_Dev/SAI/skills/receipt-collector/` for a worked example.
+See the existing overlay at `~/SAI/skills/receipt-collector/` for a worked example.
 
 ## Why two layers?
 
