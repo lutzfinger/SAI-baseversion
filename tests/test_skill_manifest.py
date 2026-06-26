@@ -431,3 +431,70 @@ class TestLoaderIntegrityCheck:
         # Phase 2: drift is a warning, NOT an error — skill still loads.
         assert report.ok, "Phase 2 must not block on drift"
         assert any(w.rule == "integrity.drift" for w in report.warnings)
+
+
+from app.skills import manifest_validator as _mv  # noqa: E402 (appended block)
+
+
+def _minimal_v2_dict(*, declare_surface=None, with_claude_code_profile=False):
+    """A minimal valid v2 manifest, optionally declaring a surface in the
+    sai_workflow trigger and/or carrying a claude_code profile."""
+    v1 = _minimal_manifest_dict()
+    sai_workflow = {
+        "enabled": True,
+        "deploy_to": ["sai_runtime"],
+        "trigger": {
+            "kind": "manual",
+            "config": ({"entry_points": [declare_surface]} if declare_surface else {}),
+        },
+        "cascade": v1["cascade"],
+        "tools": [],
+        "eval": v1["eval"],
+        "outputs": v1["outputs"],
+    }
+    profiles = {"sai_workflow": sai_workflow}
+    if with_claude_code_profile:
+        profiles["claude_code"] = {
+            "enabled": True,
+            "deploy_to": ["claude_code"],
+            "files": ["SKILL.md"],
+            "eval": {"datasets": [
+                {"kind": "canaries", "path": "canaries.jsonl", "min_count": 1},
+            ]},
+        }
+    return {"schema_version": "2", "identity": v1["identity"], "profiles": profiles}
+
+
+class TestSurfaceProfileGate:
+    """A declared claude_code/cowork runtime surface must have a deployable profile."""
+
+    def test_v1_declaring_claude_code_without_profile_fails(self):
+        d = _minimal_manifest_dict()
+        d["trigger"]["config"] = {"entry_points": ["claude_code"]}
+        # provenance present: the failure must NOT be swallowed into a "candidate".
+        d["provenance"] = {"designer_surface": "claude_code", "candidate": True}
+        _, report = _mv.validate_dict(d)
+        assert not report.ok, report.summary()
+        assert any(i.rule == "manifest.surface_without_profile" for i in report.errors), report.summary()
+        assert not any(w.rule == "manifest.candidate" for w in report.warnings), \
+            "surface error was wrongly reclassified as a candidate"
+
+    def test_v1_entry_points_bare_string_fails_without_raising(self):
+        d = _minimal_manifest_dict()
+        d["trigger"]["config"] = {"entry_points": "claude_code"}  # bare string, not a list
+        _, report = _mv.validate_dict(d)  # must not raise
+        assert any(i.rule == "manifest.surface_without_profile" for i in report.errors), report.summary()
+
+    def test_v1_no_surface_declaration_passes(self):
+        _, report = _mv.validate_dict(_minimal_manifest_dict())
+        assert report.ok, report.summary()
+
+    def test_v2_dual_profile_declaring_claude_code_passes(self):
+        d = _minimal_v2_dict(declare_surface="claude_code", with_claude_code_profile=True)
+        _, report = _mv.validate_dict(d)
+        assert report.ok, report.summary()
+
+    def test_v2_declares_cowork_without_cowork_deploy_fails(self):
+        d = _minimal_v2_dict(declare_surface="cowork", with_claude_code_profile=False)
+        _, report = _mv.validate_dict(d)
+        assert any(i.rule == "manifest.surface_without_profile" for i in report.errors), report.summary()

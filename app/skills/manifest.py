@@ -400,8 +400,8 @@ class ValidationReport(BaseModel):
 # See ~/SAI/docs/PLAN-UNIFIED-SKILL-SYNC.md for rationale.
 #
 # v1 (above) = single SAI workflow per skill.yaml. v2 = one skill_id can
-# carry multiple deliverables (e.g., a granola-fetch SAI workflow runner
-# AND a granola-fetch Claude Code SKILL.md prose form). Each deliverable
+# carry multiple deliverables (e.g., a qa-website-generator SAI workflow runner
+# AND a qa-website-generator Claude Code SKILL.md prose form). Each deliverable
 # is a "profile" with its own files[], deploy_to[], and eval contract.
 #
 # Backward-compat: a skill.yaml with schema_version="1" (or no profiles:
@@ -526,7 +526,7 @@ class SkillManifestV2(BaseModel):
 
     A skill.yaml carries at most one profile of each kind. Both profiles
     enabled means the same skill_id ships two deliverables (the
-    granola-fetch pattern).
+    qa-website-generator pattern).
     """
 
     model_config = ConfigDict(extra="forbid")
