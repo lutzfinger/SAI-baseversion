@@ -45,6 +45,10 @@ ALLOWED_DEPLOY_TARGETS: frozenset[str] = frozenset(
     {"sai_runtime", "claude_code", "cowork"}
 )
 
+# Surfaces a skill must carry a real deployable profile for, to be reachable.
+# `sai_runtime` is implicit for every skill (the cascade), so it is not gated.
+DEPLOYABLE_SURFACES: frozenset[str] = frozenset({"claude_code", "cowork"})
+
 ManifestType = Union[SkillManifest, SkillManifestV2]
 
 
@@ -162,7 +166,99 @@ def validate_dict(
             )],
         )
 
+    # Surface ↔ profile reachability gate — a HARD check applied AFTER the
+    # candidate reclassification above, so a `provenance:` key cannot swallow
+    # it into a "candidate" warning (the exact way linkedin-answer-messages
+    # slipped through: it declared claude_code, carried `candidate: true`, and
+    # validated clean). Only meaningful when the manifest validated; schema
+    # errors dominate otherwise.
+    if report.ok and manifest is not None:
+        surface_errors = _check_surface_profile_match(data, manifest)
+        if surface_errors:
+            report.errors.extend(surface_errors)
+            manifest = None
+
     return manifest, report
+
+
+# ─── surface ↔ profile reachability gate ─────────────────────────────
+
+
+def _declared_surfaces(data: dict[str, Any]) -> set[str]:
+    """Deployable surfaces the skill *says* it runs on, read defensively from
+    the free-form ``trigger.config.entry_points`` (v1 top-level trigger and v2
+    ``profiles.sai_workflow.trigger``). Never raises; only returns surfaces in
+    ``DEPLOYABLE_SURFACES``."""
+
+    out: set[str] = set()
+
+    def _harvest(trigger: Any) -> None:
+        if not isinstance(trigger, dict):
+            return
+        cfg = trigger.get("config")
+        if not isinstance(cfg, dict):
+            return
+        ep = cfg.get("entry_points")
+        if isinstance(ep, str):
+            ep = [ep]
+        if not isinstance(ep, (list, tuple, set)):
+            return
+        for e in ep:
+            if isinstance(e, str) and e in DEPLOYABLE_SURFACES:
+                out.add(e)
+
+    _harvest(data.get("trigger"))  # v1
+    profiles = data.get("profiles")  # v2
+    if isinstance(profiles, dict):
+        sw = profiles.get("sai_workflow")
+        if isinstance(sw, dict):
+            _harvest(sw.get("trigger"))
+    return out
+
+
+def _deployable_surfaces(manifest: ManifestType) -> set[str]:
+    """Surfaces the skill can actually deploy to, from the enabled profiles'
+    ``deploy_to``. A v1 ``SkillManifest`` has no profiles — it is the implicit
+    single sai_workflow, reachable only at ``sai_runtime``."""
+
+    if isinstance(manifest, SkillManifestV2):
+        out: set[str] = set()
+        for name in ("sai_workflow", "claude_code"):
+            prof = getattr(manifest.profiles, name, None)
+            if prof is not None and prof.enabled:
+                out.update(prof.deploy_to)
+        return out
+    return {"sai_runtime"}
+
+
+def _check_surface_profile_match(
+    data: dict[str, Any],
+    manifest: ManifestType,
+) -> list[ValidationIssue]:
+    """A skill that declares a claude_code/cowork runtime surface MUST carry an
+    enabled profile that deploys there — otherwise it can never reach that
+    surface, and the gap only surfaces at ``sai-overlay deploy``. Catch it here,
+    at registration time. Returns one issue per unreachable declared surface."""
+
+    declared = _declared_surfaces(data)
+    if not declared:
+        return []
+    deployable = _deployable_surfaces(manifest)
+    missing = sorted(declared - deployable)
+    if not missing:
+        return []
+    return [ValidationIssue(
+        severity="error",
+        rule="manifest.surface_without_profile",
+        message=(
+            f"skill declares runtime surface(s) {missing} (via "
+            f"trigger.config.entry_points) but no enabled profile deploys "
+            f"there (deployable: {sorted(deployable)}). A v1 workflow-only "
+            f"skill cannot reach claude_code/cowork; add a v2 "
+            f"`profiles.<surface>` block with `deploy_to: [<surface>]`. See "
+            f"docs/SKILL-LIFECYCLE.md §3 (qa-website-generator is the example)."
+        ),
+    )]
 
 
 # ─── v1 path ─────────────────────────────────────────────────────────
