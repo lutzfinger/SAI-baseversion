@@ -45,19 +45,23 @@ SAI is a **stack of intelligence** for routine personal-knowledge tasks.
 The stack is ordered cheapest → most expensive:
 
 1. **Rules** — deterministic, free, microseconds.
-2. **Classifier** — small ML model, milliseconds, ~free.
-3. **Local LLM** — Ollama / llama.cpp on the operator's hardware.
-4. **Cloud LLM** — vendor-pluggable (OpenAI / Anthropic / Gemini / ...).
-5. **Human** — Slack ask, asynchronous, decisive.
+2. **Local LLM** — Ollama / llama.cpp on the operator's hardware.
+3. **Cloud LLM** — vendor-pluggable (OpenAI / Anthropic / Gemini / ...).
+4. **Human** — Slack ask, asynchronous, decisive.
 
 **Runtime cascades upward only when needed.** Try rules first; if they
 abstain, try the next tier; stop at the active ceiling. The expensive tier
 runs only when the cheap tier said "I don't know."
 
-**Build time cascades downward.** A new task starts at cloud LLM (because
-we don't know what works yet). As eval data accumulates, we graduate
-local LLM → classifier → rules. Every graduation is human-approved,
-gated on precision/recall against eval ground truth.
+**Skills and workflows run assistive first, autonomous over time.** A new
+capability starts attended (it proposes; the operator approves) and earns
+autonomy as it proves out.
+
+**Build time grows an eval dataset from operator feedback.** The operator
+corrects the system; each correction becomes observed-reality ground truth,
+so the AI improves gradually without regressing the parts that already work.
+Cheaper tiers (rules, then local LLM) take over a task only when that eval
+evidence supports it.
 
 ---
 
