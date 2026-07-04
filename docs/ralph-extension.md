@@ -39,6 +39,16 @@ The agent-session hook is defense in depth. It protects agent sessions with this
 repo open as the project; it does not replace the CI and pre-commit layers, which
 remain the guarantee for every other actor.
 
+## The different-vendor review
+
+`scripts/cross_review.py` runs an adversarial review of a file by a different
+vendor (OpenAI), the second-opinion step. Provide `OPENAI_API_KEY` through your
+1Password wrapper (never hardcode a secret reference; the boundary linter blocks
+those). Pass `--context` describing what the artifact IS, so the reviewer does not
+mis-frame it. Before sending, the tool runs the boundary linter on the target and
+refuses if it is flagged, so private data never leaves for an external vendor. It
+is advisory: a human triages the findings; it is not a gate.
+
 ## The verify entry
 
 `scripts/verify.sh` is this repo's local mirror of the CI shippability gate (the
