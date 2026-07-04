@@ -1,0 +1,62 @@
+# Why this repo extends Ralph
+
+This project borrows the chassis ideas from the Ralph agent-harness pattern
+(deterministic hooks, evidence-backed reviews, a bounded autonomous loop) and
+keeps the parts of SAI that Ralph has no concept of. This note explains what we
+took, what we kept, and why.
+
+## What we took from Ralph
+
+1. **Deterministic hooks as enforcement, not discipline.** A hook runs in the
+   agent session and cannot be skipped by forgetting a setup step. We use this to
+   make the boundary check un-bypassable at author time (see the guarantee below).
+2. **A different-vendor review gate.** Security-relevant changes get an
+   adversarial review from a second, independent model vendor before they ship.
+   This also satisfies the rule that the surface which wrote a change never
+   certifies its own deployment.
+3. **A bounded autonomous loop.** Repeated passes with progress kept in files and
+   git rather than in one context window, with checks as the escape condition.
+
+## The boundary guarantee is three layers
+
+Keeping personal data out of this public repo does not rely on any single
+mechanism. Three independent layers each enforce the same boundary check:
+
+1. **CI and branch protection (primary, covers every actor).** The boundary
+   workflow runs on every push and pull request to the main branch, and branch
+   protection requires it to pass before a merge. This covers all contributors
+   and automation, not just one machine.
+2. **The git pre-commit hook (contributor-local).** Installed with one command
+   (`make hooks`), it runs the boundary linter on every commit so violations are
+   caught before they are recorded locally.
+3. **The agent-session hook (this repo's `.claude` layer).** A pre-tool hook runs
+   the boundary linter before a `git commit` or `git push` inside an agent session
+   and blocks on any finding, so an agent that never ran `make hooks` is still
+   covered. It fails closed: a parse error, a missing linter, or a linter that
+   exits non-zero all block.
+
+The agent-session hook is defense in depth. It protects agent sessions with this
+repo open as the project; it does not replace the CI and pre-commit layers, which
+remain the guarantee for every other actor.
+
+## What SAI keeps that Ralph does not have
+
+- **Eval-first graduation.** A workflow earns autonomy only when it has an eval
+  dataset, has run manually under human review, and a human decides to promote it.
+  Cheaper tiers graduate the same way. Ralph has no eval-dataset or graduation
+  concept.
+- **Hash-verified deployment.** A skill is not live until its deployed bytes match
+  the source, verified by hash.
+- **Hard human gates.** Approval to code and a separate approval to push and to
+  deploy are mandatory. The bounded loop never pushes on its own.
+- **Repo-specific checks.** The content-addressed prompt locks and the generated
+  tool overview stay in the verification set.
+
+## Bounded-loop prerequisites (hard, before any autonomous loop is enabled)
+
+- A token budget that caps the run.
+- The eval gate as the loop's escape condition, not just an iteration limit.
+- A human approval gate before any push or deploy.
+
+Until all three are in place, the autonomous loop stays off and work runs under
+the hard human gates above.
