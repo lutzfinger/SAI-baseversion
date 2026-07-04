@@ -6,6 +6,14 @@ This repo is intentionally small and opinionated. The easiest way to make a
 useful contribution is to align early on scope, safety boundaries, and the
 expected implementation shape.
 
+## Local setup (do this once per clone)
+
+Run `make hooks` after cloning. It installs the git pre-commit hook that runs
+the boundary linter (`scripts/boundary_check.py`) on every commit, so personal
+data never reaches this public repo locally. This is the contributor-local layer
+of the boundary guarantee; CI (`.github/workflows/boundary.yml`) and branch
+protection enforce the same check on the server for every push and pull request.
+
 ## Before You Start
 
 If you want to make anything beyond a tiny typo or docs fix, open an Issue

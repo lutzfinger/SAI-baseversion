@@ -13,7 +13,7 @@ repos:
     hooks:
       - id: boundary-check
         name: boundary check (no personal data in public repo)
-        entry: python scripts/boundary_check.py --paths
+        entry: python3 scripts/boundary_check.py --paths
         language: system
         pass_filenames: true
         # Skip non-text files; the linter also skips them but pre-commit will

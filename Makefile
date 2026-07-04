@@ -2,11 +2,12 @@ PYTHON ?= .venv/bin/python
 UVICORN_HOST ?= 127.0.0.1
 UVICORN_PORT ?= 8000
 
-.PHONY: help install dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck log-maintenance log-maintenance-dry compose-up compose-down compose-pull-model compose-logs compose-shell
+.PHONY: help install hooks dev auth-newsletters auth-newsletter-tags auth-sai-email run-newsletters run-newsletter-tags run-sai-email privacy-scan test lint typecheck log-maintenance log-maintenance-dry compose-up compose-down compose-pull-model compose-logs compose-shell
 
 help:
 	@printf '%s\n' \
 		'make install               Editable install + dev extras (re-run after pyproject.toml changes)' \
+		'make hooks                 Install the git pre-commit hook (boundary linter); run once per clone' \
 		'make dev                   Start the local API' \
 		'make compose-up            Start sai + ollama in docker compose' \
 		'make compose-pull-model    Pull qwen2.5:7b into the compose ollama service' \
@@ -28,6 +29,11 @@ help:
 
 install:
 	@$(PYTHON) -m pip install -e '.[dev]'
+
+hooks:
+	@pip install pre-commit >/dev/null 2>&1 || $(PYTHON) -m pip install pre-commit
+	@pre-commit install
+	@echo "pre-commit hook installed: the boundary linter now runs on every git commit."
 
 dev:
 	@$(PYTHON) -m uvicorn app.main:app --reload --host $(UVICORN_HOST) --port $(UVICORN_PORT)
