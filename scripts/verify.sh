@@ -55,6 +55,7 @@ echo "verify: [2/3] framework regression"
     tests/test_boundary_guard_blocks.py \
     tests/test_danger_guard_blocks.py \
     tests/test_cross_review.py \
+    tests/test_bounded_loop.py \
     tests/canonical/ \
     || fail "framework regression" "run 'make install' if this is an import or dependency error"
 
