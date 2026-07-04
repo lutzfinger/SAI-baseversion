@@ -72,6 +72,19 @@ escape condition.
 - **Repo-specific checks.** The content-addressed prompt locks and the generated
   tool overview stay in the verification set.
 
+## The bounded loop (v1: in-session, single task)
+
+`scripts/bounded_loop.py` is the loop's safety contract: it runs an `--attempt-cmd`
+then an `--escape-cmd` until the escape check passes, and stops on any hard cap
+(iterations, wall-clock, or a stuck no-change run). It NEVER pushes; that guarantee
+is about the runner. `scripts/loop_example.sh` wires the real headless agent as the
+driver: `claude -p "<task>" --permission-mode acceptEdits`, run in a throwaway
+worktree. `acceptEdits` keeps the PreToolUse hooks (danger_guard, boundary_guard)
+blocking even mid-loop, so a loop-driven agent still cannot rewrite history or leak
+private data. Run it from a plain terminal, never nested in a live session; review
+the branch diff before any push. Unattended (cron), parallel worktrees, and
+review-in-loop are later increments.
+
 ## Bounded-loop prerequisites (hard, before any autonomous loop is enabled)
 
 - A token budget that caps the run.

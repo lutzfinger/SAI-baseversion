@@ -42,6 +42,7 @@ jobs:
             tests/test_boundary_guard_blocks.py \
             tests/test_danger_guard_blocks.py \
             tests/test_cross_review.py \
+            tests/test_bounded_loop.py \
             tests/canonical/
 
   sample-skill-e2e:
