@@ -63,7 +63,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     tmp_path = None
     try:
-        fd, tmp_path = tempfile.mkstemp(suffix=Path(args.file).suffix or ".txt")
+        # inside REPO_ROOT: boundary_check.py resolves paths relative to its root
+        # and loads its private-terms from there, so an outside-repo temp would
+        # crash it. A hidden, unique temp under the repo lints correctly.
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(REPO_ROOT), prefix=".crossrev_tmp_",
+            suffix=Path(args.file).suffix or ".txt",
+        )
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(content)
         result = subprocess.run(
