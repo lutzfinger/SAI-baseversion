@@ -19,6 +19,11 @@ Before you push, run `scripts/verify.sh`. It runs the same checks CI runs
 to end) so you get CI's verdict locally first. It is fail-closed: any stage that
 fails or cannot run exits non-zero.
 
+For a second-opinion review of a security-relevant change, run
+`scripts/cross_review.py --file <path> --context "<what it is>"` (needs
+`OPENAI_API_KEY` via your 1Password wrapper). It refuses to send a file the
+boundary linter flags, and is advisory.
+
 ## Before You Start
 
 If you want to make anything beyond a tiny typo or docs fix, open an Issue
