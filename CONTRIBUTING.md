@@ -14,6 +14,11 @@ data never reaches this public repo locally. This is the contributor-local layer
 of the boundary guarantee; CI (`.github/workflows/boundary.yml`) and branch
 protection enforce the same check on the server for every push and pull request.
 
+Before you push, run `scripts/verify.sh`. It runs the same checks CI runs
+(boundary linter, framework regression, sample-skill integrity and cascade end
+to end) so you get CI's verdict locally first. It is fail-closed: any stage that
+fails or cannot run exits non-zero.
+
 ## Before You Start
 
 If you want to make anything beyond a tiny typo or docs fix, open an Issue

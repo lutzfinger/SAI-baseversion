@@ -39,6 +39,16 @@ The agent-session hook is defense in depth. It protects agent sessions with this
 repo open as the project; it does not replace the CI and pre-commit layers, which
 remain the guarantee for every other actor.
 
+## The verify entry
+
+`scripts/verify.sh` is this repo's local mirror of the CI shippability gate (the
+equivalent of Ralph's per-language `verify.sh`). It runs the same checks CI runs
+and is fail-closed. It duplicates CI's check list today, so if the CI workflow
+changes, update the script; the proper single-source fix (CI calls the script) is
+a future increment that must keep the branch-protection-required `boundary-check`
+status name. The verify entry is also what a future bounded loop will use as its
+escape condition.
+
 ## What SAI keeps that Ralph does not have
 
 - **Eval-first graduation.** A workflow earns autonomy only when it has an eval
