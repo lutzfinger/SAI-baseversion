@@ -4,6 +4,7 @@ A map of the documents in this folder, grouped by purpose. Nothing here is
 deleted or moved; this index only makes the set navigable.
 
 ## Architecture and core
+- [ralph-extension.md](ralph-extension.md) - why this repo extends Ralph; the 3-layer boundary guarantee.
 - [architecture.md](architecture.md) - layers, request flow, control plane.
 - [system_inventory.md](system_inventory.md) - what components exist and where.
 - [memory_architecture.md](memory_architecture.md) - state and memory model.
