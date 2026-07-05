@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,37 @@ def _pick_model(client) -> str:
     return "gpt-4o"
 
 
+# Severity ladder for the opt-in --fail-on gate. none=0 .. critical=4.
+_SEVERITY = {"none": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+# A finding line is the severity word FOLLOWED BY a colon/dash (as the review
+# prompt asks: "SEVERITY: issue"). Requiring the delimiter avoids false-gating on
+# prose like "High level overview ..."; the optional SEVERITY prefix and trailing
+# `**` tolerate markdown. Heuristic (text-format-dependent) by nature.
+_FINDING_RE = re.compile(
+    r"^\s*[-*>\s]*(?:SEVERITY\s*[:=\-]\s*)?(CRITICAL|HIGH|MEDIUM|LOW)\**\s*[:\-]",
+    re.IGNORECASE,
+)
+
+
+def _max_severity(review_text: str) -> int:
+    """Highest finding severity in the review text (0 if none). Heuristic: parses
+    the `SEVERITY: issue` finding lines the review prompt asks the model to emit."""
+    worst = 0
+    for line in review_text.splitlines():
+        match = _FINDING_RE.match(line)
+        if match:
+            worst = max(worst, _SEVERITY[match.group(1).lower()])
+    return worst
+
+
+def _gate_exit(review_text: str, fail_on: str) -> int:
+    """0 (advisory / below threshold) or 1 (a finding at/above the --fail-on level)."""
+    threshold = _SEVERITY[fail_on]
+    if threshold == 0:
+        return 0
+    return 1 if _max_severity(review_text) >= threshold else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="Different-vendor (OpenAI) adversarial review of a file."
@@ -44,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="what the artifact IS (prevents mis-framing)")
     ap.add_argument("--focus", default="correctness, fail-open/security, and edge-case bugs",
                     help="what to focus the review on")
+    ap.add_argument("--fail-on", choices=list(_SEVERITY), default="none",
+                    help="exit non-zero if the review has a finding at/above this "
+                         "severity (default none = advisory, always exit 0)")
     args = ap.parse_args(argv)
 
     # (a) readable file
@@ -120,10 +155,15 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 3
 
+    review = response.choices[0].message.content or ""
     print(f"MODEL: {model}")
     print("=== REVIEW ===")
-    print(response.choices[0].message.content)
-    return 0
+    print(review)
+    gate = _gate_exit(review, args.fail_on)
+    if gate:
+        print(f"cross_review: GATE - a finding at/above '{args.fail_on}' is present.",
+              file=sys.stderr)
+    return gate
 
 
 if __name__ == "__main__":
