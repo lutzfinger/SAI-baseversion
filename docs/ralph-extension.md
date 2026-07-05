@@ -82,8 +82,15 @@ driver: `claude -p "<task>" --permission-mode acceptEdits`, run in a throwaway
 worktree. `acceptEdits` keeps the PreToolUse hooks (danger_guard, boundary_guard)
 blocking even mid-loop, so a loop-driven agent still cannot rewrite history or leak
 private data. Run it from a plain terminal, never nested in a live session; review
-the branch diff before any push. Unattended (cron), parallel worktrees, and
-review-in-loop are later increments.
+the branch diff before any push. Unattended (cron) and parallel worktrees are
+later increments.
+
+For a review-gated loop, set the loop's `--escape-cmd` to
+`scripts/escape_with_review.sh` (with `EVAL_CMD` and `FILE`): the loop declares
+success only when the eval passes AND a different-vendor review
+(`cross_review.py --fail-on high`) finds no HIGH. It gates at high (a nitpick
+MEDIUM does not stall it), logs which check blocked, and treats a review tool
+error as blocked (fail-closed). Give review-gated loops a higher iteration budget.
 
 ## Bounded-loop prerequisites (hard, before any autonomous loop is enabled)
 
