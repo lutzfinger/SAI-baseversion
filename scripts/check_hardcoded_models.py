@@ -54,6 +54,19 @@ _ALLOWED_PATH_PARTS: tuple[str, ...] = (
     "scripts/",
     "config/llm_registry.yaml",
     "config/llm_registry.example.yaml",
+    # Example/template workflows are documentation, not runtime code.
+    "workflows/_examples/",
+    # Agent surface declarations are config (like the registry): they DECLARE a
+    # default/fallback model for an agent plane, the same way llm_registry does.
+    ".surface.yaml",
+    # Skill-local model DEFAULTS are an operator-edit surface (like scripts/ and
+    # YAML): a skill's DEFAULT_MODEL constant is config-like, not a framework
+    # cascade tier. The framework cascade under app/ (workers/tools/graphs/agents)
+    # stays strictly gated. Skills declare their real cascade via manifest ROLES.
+    "skills/",
+    # Infra/deploy config (compose env defaults, pull commands) names the local
+    # model the same way a YAML value does.
+    "docker-compose",
 )
 
 _SCANNED_SUFFIXES: tuple[str, ...] = (".py", ".yaml", ".yml", ".json", ".toml")
@@ -78,11 +91,19 @@ def _scan_file(path: Path, rel: str) -> list[str]:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return findings
+    is_py = rel.endswith(".py")
     for line_number, line in enumerate(text.splitlines(), start=1):
         if _ALLOWLIST_MARKER.search(line):
             continue
+        # In Python, a model name inside a `#` comment is a REFERENCE (explaining
+        # what a role resolves to), not a hardcoded call — scan only the code
+        # portion before the comment. (Heuristic: a `#` inside a string is rare
+        # in these files and, per this linter's "loud not subtle" design, a
+        # missed edge is acceptable.) Docstring prose should name the ROLE, not
+        # the model, so it stays scanned.
+        scan_line = line.split("#", 1)[0] if is_py else line
         for pattern in _PATTERNS:
-            match = pattern.search(line)
+            match = pattern.search(scan_line)
             if match is None:
                 continue
             findings.append(
