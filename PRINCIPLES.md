@@ -39,6 +39,46 @@ or task-specific belongs there.
 
 ---
 
+## The 20 operational checks (cross-reference index)
+
+The numbered principles below restate a smaller set of reflexes across many
+surfaces (fail-closed appears in #6/#6a/#23/#24c/#29; proposer≠applier in
+#3/#9/#16/#20/#21/#33b; guarded-interface in #16b/#16e/#16f/#16g/#16i/#30;
+reuse-before-build in #14/#25/#33a). The **check-in layer** (the automated
+gates + the `principles_checkin` spine) operates on the 20 consolidated checks
+below; each maps back to the canonical numbers, which remain the source of
+truth. This index is a navigation aid — it does not replace or collapse the
+principles, it links the enforcement view to them.
+
+| # | Check | Canonical principles |
+|---|---|---|
+| 1 | Fail closed everywhere | #6, #6a, #23, #24c, #29 |
+| 2 | No secrets/PII leak; state stays local | #1, #7, #7a, #8, #24 |
+| 3 | Least privilege | #5, #19 |
+| 4 | Policy before side effects | #2 |
+| 5 | Proposer ≠ applier; mutations two-phase, human-approved | #3, #9, #16, #20, #21, #33b |
+| 6 | Eval contract on every workflow | #10, #16a, #16d, #16h |
+| 7 | Ground truth = reality only | #11, #16, #16c |
+| 8 | Cheap-first cascade, early-stop | #12, #29 |
+| 9 | LLM access Provider-mediated & config-swappable | #13, #24a, #24b |
+| 10 | Sample-rate experimentation | #15 |
+| 11 | Public = mechanism, private = values | #17, #18 |
+| 12 | Reuse before build (library AND internal primitive) | #14, #25, #33a |
+| 13 | Guarded-interface contract | #16b, #16e, #16f, #16g, #16i, #30 |
+| 14 | Nothing vanishes; everything observable | #4, #27, #28, #31 |
+| 15 | Test before action; watch always-on services | #32 + AGENTS.md watchdog |
+| 16 | Naming + sequencing hygiene | #22, #26 |
+| 17 | Skill protocol shape | #33, #33b |
+| 18 | Frame-Check default; only a deterministic PII gate down-grades it | harness (plan-test-code Step 0) |
+| 19 | Plan-test-code gauntlet + deploy-verify + doc-freshness | harness (plan-test-code, code-checkout) |
+| 20 | LLM over brittle keyword matching | derived (see #11/#12; tagging design) |
+
+A full reconciliation (collapsing the restatements in the prose itself, not just
+cross-linking them) is deferred — see the operator's `LOOSE-ENDS.md`. When doing
+it: collapse restatements + cross-link, never delete nuance.
+
+---
+
 ## Why we exist
 
 SAI is a **stack of intelligence** for routine personal-knowledge tasks.
