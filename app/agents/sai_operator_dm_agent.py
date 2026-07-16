@@ -17,9 +17,9 @@ operator intent, ask clarifying questions, and stage proposals only.
 Execution requires operator ✅ via the existing two-phase commit.
 
 LLM choice: per #24b the default for human-facing interactive surfaces
-is CLOUD MEDIUM (claude-haiku-4-5 via the `agent_default` role). A
-future iteration will add a local Tier-1 (Ollama qwen2.5:7b) with
-cloud as Tier-2 fallback per #12 cascade; v0.1 ships cloud-only.
+is CLOUD MEDIUM (the `agent_default` role — resolved from the registry, not
+named here). A future iteration will add a local Tier-1 (the `cascade_local`
+role) with cloud as Tier-2 fallback per #12 cascade; v0.1 ships cloud-only.
 
 Per #24c the system prompt is hash-locked at
 `prompts/agents/sai_operator_dm_agent.md`.
