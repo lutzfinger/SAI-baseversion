@@ -25,8 +25,7 @@ tools:
   - tool_id: cloud_llm_classifier
     kind: cloud_llm_classifier
     prompt: email/llm-classify-cloud.md
-    provider: openai
-    model: gpt-5.2
+    role: cascade_cloud
   - tool_id: consistency_evaluator
     kind: consistency_evaluator
   - tool_id: gmail_thread_tagger

@@ -1,0 +1,26 @@
+name: Hardcoded LLM Models
+
+# Per PRINCIPLES.md §24b: code may not embed literal model ids. All LLM
+# calls must go through `app.llm.registry` via a role name; vendor-specific
+# exceptions (vision, web search, TTS, guard models) carry an inline
+# `# noqa: hardcoded-model -- <reason>` marker.
+#
+# This job runs the boundary check on every PR and push to main.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  check-hardcoded-models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run hardcoded-model boundary check
+        run: python scripts/check_hardcoded_models.py .

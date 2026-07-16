@@ -16,7 +16,6 @@ tools:
   - tool_id: sai_email_planner
     kind: sai_email_planner
     prompt: sai_email/plan.md
-    provider: openai
-    model: gpt-5.2
+    role: cascade_cloud
     config:
       max_output_tokens: 700

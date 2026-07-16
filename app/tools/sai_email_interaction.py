@@ -31,8 +31,15 @@ class SaiEmailGenericPlannerTool:
         self.tool_definition = tool_definition
         self.prompt = prompt
         self.settings = settings
-        self.provider = (tool_definition.provider or "openai").strip().lower()
-        self.model = tool_definition.model or get_model_for_role("agent_default")
+        if tool_definition.role:
+            # #24b: role resolves BOTH vendor and model from the registry.
+            from app.llm.registry import get as _get_role
+            _spec = _get_role(tool_definition.role)
+            self.provider = _spec.vendor.strip().lower()
+            self.model = _spec.model
+        else:
+            self.provider = (tool_definition.provider or "openai").strip().lower()
+            self.model = tool_definition.model or get_model_for_role("agent_default")
         self.timeout_seconds = _resolve_timeout_seconds(tool_definition, settings)
         self.max_output_tokens = _resolve_max_output_tokens(tool_definition)
 

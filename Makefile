@@ -97,3 +97,6 @@ compose-logs:
 
 compose-shell:
 	@docker compose exec sai bash
+
+check-models: ## boundary: no hardcoded LLM model ids (#24b)
+	@python scripts/check_hardcoded_models.py .

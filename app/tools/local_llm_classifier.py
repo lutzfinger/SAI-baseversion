@@ -60,12 +60,19 @@ class StructuredEmailClassifierTool:
         self.tool_definition = tool_definition
         self.prompt = prompt
         self.settings = settings
-        self.provider = (tool_definition.provider or "openai").strip().lower()
-        self.model = tool_definition.model or (
-            settings.local_llm_model
-            if tool_definition.kind == "local_llm_classifier"
-            else get_model_for_role("cascade_cloud")
-        )
+        if tool_definition.role:
+            # #24b: role resolves BOTH vendor and model from the registry.
+            from app.llm.registry import get as _get_role
+            _spec = _get_role(tool_definition.role)
+            self.provider = _spec.vendor.strip().lower()
+            self.model = _spec.model
+        else:
+            self.provider = (tool_definition.provider or "openai").strip().lower()
+            self.model = tool_definition.model or (
+                settings.local_llm_model
+                if tool_definition.kind == "local_llm_classifier"
+                else get_model_for_role("cascade_cloud")
+            )
         self.timeout_seconds = _resolve_timeout_seconds(tool_definition, settings)
         self.max_output_tokens = _resolve_max_output_tokens(tool_definition)
         self.client = self._build_client()
