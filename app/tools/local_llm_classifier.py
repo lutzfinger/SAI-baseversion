@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.llm.registry import get_model_for_role
 from app.shared.config import Settings
 from app.shared.models import PromptDocument, WorkflowToolDefinition
 from app.tools.langchain_client import (
@@ -63,7 +64,7 @@ class StructuredEmailClassifierTool:
         self.model = tool_definition.model or (
             settings.local_llm_model
             if tool_definition.kind == "local_llm_classifier"
-            else "gpt-5.2"
+            else get_model_for_role("cascade_cloud")
         )
         self.timeout_seconds = _resolve_timeout_seconds(tool_definition, settings)
         self.max_output_tokens = _resolve_max_output_tokens(tool_definition)
