@@ -6,6 +6,7 @@ import json
 from time import perf_counter
 from typing import Any
 
+from app.llm.registry import get_model_for_role
 from app.shared.config import Settings
 from app.shared.models import PromptDocument, WorkflowToolDefinition
 from app.tools.langchain_client import (
@@ -31,7 +32,7 @@ class SaiEmailGenericPlannerTool:
         self.prompt = prompt
         self.settings = settings
         self.provider = (tool_definition.provider or "openai").strip().lower()
-        self.model = tool_definition.model or "gpt-5.2"
+        self.model = tool_definition.model or get_model_for_role("agent_default")
         self.timeout_seconds = _resolve_timeout_seconds(tool_definition, settings)
         self.max_output_tokens = _resolve_max_output_tokens(tool_definition)
 
