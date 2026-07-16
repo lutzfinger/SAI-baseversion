@@ -13,7 +13,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RunStatus(StrEnum):
@@ -121,6 +121,12 @@ class WorkflowToolDefinition(BaseModel):
     expected_sha256: str | None = None
     provider: str | None = None
     model: str | None = None
+    # #24b: prefer a logical ROLE (resolved from config/llm_registry.yaml at
+    # runtime) over a literal (provider, model) pair. When `role` is set the
+    # tool derives BOTH vendor and model from the registry; `model`/`provider`
+    # are the legacy literal escape hatch. Setting both role and model is
+    # ambiguous and refused (fail closed, #6).
+    role: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("kind")
@@ -133,6 +139,17 @@ class WorkflowToolDefinition(BaseModel):
             raise ValueError("Workflow tool kind must be a non-empty string.")
         get_tool_spec(normalized)
         return normalized
+
+    @model_validator(mode="after")
+    def _role_xor_literal_model(self) -> WorkflowToolDefinition:
+        if self.role and self.model:
+            raise ValueError(
+                f"tool {self.tool_id!r}: set EITHER role (preferred, #24b) OR a "
+                f"literal model — not both (got role={self.role!r}, model={self.model!r})."
+            )
+        if self.role is not None and not self.role.strip():
+            raise ValueError(f"tool {self.tool_id!r}: role must be non-empty when set.")
+        return self
 
 
 class RunRecord(BaseModel):
