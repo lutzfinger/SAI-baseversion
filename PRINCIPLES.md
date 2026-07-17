@@ -73,9 +73,61 @@ principles, it links the enforcement view to them.
 | 19 | Plan-test-code gauntlet + deploy-verify + doc-freshness | harness (plan-test-code, code-checkout) |
 | 20 | LLM over brittle keyword matching | derived (see #11/#12; tagging design) |
 
-A full reconciliation (collapsing the restatements in the prose itself, not just
-cross-linking them) is deferred — see the operator's `LOOSE-ENDS.md`. When doing
-it: collapse restatements + cross-link, never delete nuance.
+### Reflex clusters — the reconciliation
+
+Many numbered principles are the **same reflex applied to a different surface**.
+This section states each shared reflex **once** and names its members plus the
+surface-specific detail each one adds. The numbered principles keep that detail —
+so this *collapses the restatement without deleting the nuance*. Read a cluster to
+understand the reflex; read the member principle for how it binds to its surface.
+
+- **Fail closed** (check 1) — *reflex:* anything unexpected at a boundary
+  (ambiguity, bad schema, hash mismatch, unreachable service) **refuses or
+  abstains with a logged reason — never guesses.** *Members + what each adds:*
+  #6 (ambiguous input), #6a (every I/O schema-validated), #23 (overlay-manifest
+  hash), #24c (prompt hash), #29 (downstream outage → abstain, don't crash).
+
+- **Proposer ≠ applier** (check 5) — *reflex:* the surface that **proposes** a
+  mutation never **applies** it; a separate human/surface approves, and the
+  approval is durable + auditable. *Members:* #3 (approval is a durable row),
+  #9 (operator self-edits need all five gates), #16 (co-work prefs land
+  PROPOSED), #20 (reflection suggests, never auto-applies), #21 (writer ≠
+  deployer), #33b (a different-model Skill Critique gates registration).
+
+- **Guarded interface** (check 13) — *reflex:* every named input channel accepts
+  only **declared intents**, refuses the rest **out loud** (never silent), runs
+  on a bounded propose-only tool surface, and every interaction reaches a
+  terminal state. *Members:* #16b (#sai-eval patterns), #16e (never silent),
+  #16f (agent-plane guardrails-as-tools), #16g (pending intents reach closure),
+  #16i (per-channel allowed-topics registry), #30 (confirm/clarify on asks).
+
+- **Reuse before build** (check 12) — *reflex:* don't reinvent — use a mature
+  library, extract shared logic to a public factory, compose existing
+  primitives; a skill never inlines a new primitive. *Members:* #14 (pluggable
+  factories), #25 (libraries before custom infra), #33a (skills compose,
+  primitives are separate work). Enforced at plan time by the harness
+  reuse-inventory gate.
+
+- **Eval is the spine** (checks 6, 7) — *reflex:* every workflow grows an
+  append-only eval dataset, and ground truth flips **only on observed reality**,
+  never on model agreement. *Members:* #10, #16a, #16d, #16h (the eval contract)
+  + #11, #16c (reality-only ground truth).
+
+- **One LLM abstraction** (check 9) — *reflex:* every model call goes through a
+  Provider bound to a **registry role**, never a literal id; vendors swap by
+  YAML. *Members:* #13 (Provider protocol), #24a (open framework / single key),
+  #24b (no hardcoded models).
+
+- **Nothing leaks, nothing vanishes** (checks 2, 14) — *reflex:* operator data
+  never reaches the public repo; every decision / skip / expiry is logged with a
+  reason and never silently deleted. *Members:* #7, #7a, #8, #24 (no leak) +
+  #4, #27, #28, #31 (append-only audit / drop-don't-delete / hard ceilings /
+  observability).
+
+The rest are largely **standalone** — they don't restate another rule, so they
+aren't clustered: #1 (local-first), #5/#19 (least-privilege), #12 (cascade
+early-stop), #15 (sample-rate), #17/#18 (public/private overlay), #22 (naming),
+#26 (sequencing), #32 (test-first), #33 (skill protocol).
 
 ---
 
